@@ -20,7 +20,7 @@ def obtener_top3():
     with sync_playwright() as p:
         # OJO: Está en False para que veas el navegador en tu laptop.
         # Cuando lo subas a GitHub Actions, DEBES cambiarlo a headless=True
-        browser = p.chromium.launch(headless=False, args=["--no-sandbox", "--disable-dev-shm-usage"])
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         context = browser.new_context(viewport={"width": 1600, "height": 1000})
         page = context.new_page()
 
