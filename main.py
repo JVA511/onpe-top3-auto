@@ -1,4 +1,4 @@
-from playwright.sync_api import sync_playwright
+import requests
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timezone, timedelta
@@ -7,7 +7,8 @@ import os
 import json
 import re
 
-URL = "https://resultadoelectoral.onpe.gob.pe/main/presidenciales"
+# CONFIGURACIÓN
+URL_ONPE = "https://resultadoelectoral.onpe.gob.pe/main/presidenciales"
 SHEET_NAME = "ONPE Top 3"
 
 def votos_a_int(txt: str) -> int:
@@ -17,154 +18,95 @@ def pct_a_float(txt: str) -> float:
     return float(txt.replace("%", "").replace(",", ".").strip())
 
 def obtener_top3():
-    with sync_playwright() as p:
-        # OJO: Está en False para que veas el navegador en tu laptop.
-        # Cuando lo subas a GitHub Actions, DEBES cambiarlo a headless=True
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-        context = browser.new_context(
-            viewport={"width": 1600, "height": 1000},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            locale="es-PE",
-            timezone_id="America/Lima"
-        )
-        page = context.new_page()
+    api_key = os.environ.get("ZENROWS_API_KEY")
+    if not api_key:
+        raise Exception("Falta la API Key de ZenRows en los Secrets.")
 
-        print("Abriendo página de la ONPE...")
-        page.goto(URL, wait_until="networkidle", timeout=60000)
-        
-        # Scroll suave para que todos los gráficos carguen bien
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        page.wait_for_timeout(5000)
+    print("Solicitando datos a través de ZenRows...")
+    
+    # Parámetros para saltar el bloqueo: habilitamos JavaScript y Proxy Residencial
+    params = {
+        'url': URL_ONPE,
+        'apikey': api_key,
+        'js_render': 'true',
+        'wait_for': '.cantidad-votos', # Esperamos a que aparezcan los votos
+        'premium_proxy': 'true',
+        'proxy_country': 'pe' # <--- IP DE PERÚ
+    }
+    
+    response = requests.get('https://api.zenrows.com/v1/', params=params)
+    
+    if response.status_code != 200:
+        raise Exception(f"Error de ZenRows: {response.status_code} - {response.text}")
 
-        html = page.content()
-        browser.close()
-
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(response.content, "lxml")
     texto = soup.get_text("\n", strip=True)
     lineas = texto.splitlines()
 
     candidatos = []
-    
     for i, linea in enumerate(lineas):
         if "Cantidad de votos:" in linea:
             votos_texto = linea.replace("Cantidad de votos:", "").strip()
-            
-            # Si se quedó vacío, el número saltó a la siguiente línea del HTML
             if not votos_texto and (i + 1) < len(lineas):
                 votos_texto = lineas[i + 1].strip()
 
             try:
                 votos = votos_a_int(votos_texto)
             except ValueError:
-                continue # Si agarra basura o sigue vacío, lo ignora y avanza
+                continue
 
             porcentajes = []
-            partido = None
-            nombre = None
+            partido, nombre = None, None
 
-            # Buscamos hacia arriba con la lógica corregida
             for j in range(i - 1, max(-1, i - 15), -1):
                 txt = lineas[j].strip()
-
-                # 1. Ignorar líneas vacías o EJES DEL GRÁFICO
-                if not txt or re.fullmatch(r"[0-9\s'’.,]+", txt):
-                    continue
+                if not txt or re.fullmatch(r"[0-9\s'’.,]+", txt): continue
+                if "votos" in txt.lower() or "presidencia" in txt.lower(): continue
                 
-                # 2. Ignorar textos repetitivos de la web
-                if "votos" in txt.lower() or "presidencia" in txt.lower() or "candidatos" in txt.lower():
-                    continue
-
-                # 3. Capturar porcentajes
                 if "%" in txt:
                     porcentajes.append(pct_a_float(txt))
                     continue
 
-                # 4. Si ya tenemos los 2 %, los siguientes dos textos son Partido y Nombre
                 if len(porcentajes) >= 2:
-                    if not partido:
-                        partido = txt
-                        continue
-                    if not nombre:
-                        nombre = txt
-                        break 
+                    if not partido: partido = txt; continue
+                    if not nombre: nombre = txt; break 
 
-            # Validar que encontramos todo y guardar en la lista
             if nombre and partido and len(porcentajes) >= 2:
-                # El segundo porcentaje hacia arriba es el de Votos Válidos
-                pct_validos = porcentajes[1] 
-                
-                candidatos.append({
-                    "nombre": nombre,
-                    "partido": partido,
-                    "votos": votos,
-                    "pct": pct_validos
-                })
+                candidatos.append({"nombre": nombre, "partido": partido, "votos": votos, "pct": porcentajes[1]})
 
-    # Quitar duplicados por si Playwright leyó la misma caja dos veces
     unicos = []
     vistos = set()
     for c in candidatos:
-        clave = (c["nombre"], c["partido"])
-        if clave not in vistos:
-            vistos.add(clave)
+        if (c["nombre"], c["partido"]) not in vistos:
+            vistos.add((c["nombre"], c["partido"]))
             unicos.append(c)
 
-    # Ordenar por cantidad de votos de mayor a menor
     unicos.sort(key=lambda x: x["votos"], reverse=True)
-
-    print("\n--- TOP 3 ENCONTRADO ---")
-    for x in unicos[:3]:
-        print(f"{x['nombre']} | {x['partido']} | Votos: {x['votos']} | Pct: {x['pct']}%")
-
-    if len(unicos) < 3:
-        raise Exception("Sigue sin poder leer el top 3 completo.")
-
     return unicos[:3]
 
 def conectar():
-    with open("service_account.json", "r", encoding="utf-8") as f:
-        creds_json = json.load(f)
-
-    creds = Credentials.from_service_account_info(
-        creds_json,
-        scopes=[
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-    )
+    creds_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+    creds = Credentials.from_service_account_info(creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     return gspread.authorize(creds).open(SHEET_NAME)
 
 def guardar(top3):
-    try:
-        sheet = conectar()
-        resumen = sheet.worksheet("Resumen")
-        historico = sheet.worksheet("Historico")
-
-        p1, p2, p3 = top3
-        dif_votos = abs(p2["votos"] - p3["votos"])
-        dif_pct = round(abs(p2["pct"] - p3["pct"]), 3)
-
-        lima = timezone(timedelta(hours=-5))
-        fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
-
-        fila = [
-            fecha,
-            p1["partido"], p2["partido"], p3["partido"],
-            p1["votos"], p2["votos"], p3["votos"],
-            p1["pct"], p2["pct"], p3["pct"],
-            dif_votos, dif_pct
-        ]
-
-        resumen.update("A2:L2", [fila])
-        historico.append_row(fila, value_input_option="USER_ENTERED")
-        print("\nDatos subidos a Google Sheets con éxito.")
-    except Exception as e:
-        print(f"\nError al guardar en Sheets (¿Configuraste el JSON en tu entorno local?): {e}")
+    sheet = conectar()
+    resumen, historico = sheet.worksheet("Resumen"), sheet.worksheet("Historico")
+    p1, p2, p3 = top3
+    lima = timezone(timedelta(hours=-5))
+    fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
+    fila = [fecha, p1["partido"], p2["partido"], p3["partido"], p1["votos"], p2["votos"], p3["votos"], p1["pct"], p2["pct"], p3["pct"], abs(p2["votos"] - p3["votos"]), round(abs(p2["pct"] - p3["pct"]), 3)]
+    resumen.update("A2:L2", [fila])
+    historico.append_row(fila, value_input_option="USER_ENTERED")
 
 def main():
-    print("Ejecutando script...")
-    top3 = obtener_top3()
-    guardar(top3)
+    try:
+        top3 = obtener_top3()
+        print(f"Top 1: {top3[0]['nombre']}")
+        guardar(top3)
+        print("Éxito total.")
+    except Exception as e:
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     main()
