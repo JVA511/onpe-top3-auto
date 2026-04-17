@@ -2,7 +2,6 @@ from playwright.sync_api import sync_playwright
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timezone, timedelta
-from bs4 import BeautifulSoup
 import os
 import json
 import re
@@ -33,6 +32,10 @@ def limpiar_linea(linea: str) -> str:
     return re.sub(r"\s+", " ", linea).strip()
 
 
+def es_pct(linea: str) -> bool:
+    return bool(re.fullmatch(r"\d{1,2}[.,]\d{3}\s*%", linea.strip()))
+
+
 def obtener_top3():
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -45,7 +48,7 @@ def obtener_top3():
         )
 
         context = browser.new_context(
-            viewport={"width": 1600, "height": 3000},
+            viewport={"width": 1600, "height": 3200},
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -58,81 +61,109 @@ def obtener_top3():
         page = context.new_page()
 
         print("Abriendo página...")
-        page.goto(URL, wait_until="networkidle", timeout=90000)
-        page.wait_for_timeout(12000)
+        page.goto(URL, wait_until="domcontentloaded", timeout=90000)
+        page.wait_for_timeout(10000)
 
-        # Scroll para ayudar a renderizar
-        page.mouse.wheel(0, 3500)
-        page.wait_for_timeout(4000)
+        # Forzar render de la tabla inferior
         page.mouse.wheel(0, 2500)
-        page.wait_for_timeout(4000)
+        page.wait_for_timeout(3000)
+        page.mouse.wheel(0, 2500)
+        page.wait_for_timeout(3000)
+        page.mouse.wheel(0, 1500)
+        page.wait_for_timeout(3000)
 
-        titulo = page.title()
-        html = page.content()
-
-        print("Título:", titulo)
-        print("Longitud HTML:", len(html))
-
-        with open("debug_page.html", "w", encoding="utf-8") as f:
-            f.write(html)
-
+        # screenshot para depuración
         page.screenshot(path="debug_page.png", full_page=True)
 
+        body_text = page.locator("body").inner_text()
         browser.close()
 
-    # Extraer texto desde HTML, no desde body.inner_text()
-    soup = BeautifulSoup(html, "lxml")
-    texto = soup.get_text("\n", strip=True)
-    lineas = [limpiar_linea(x) for x in texto.splitlines() if limpiar_linea(x)]
+    print("Longitud body_text:", len(body_text))
+
+    if not body_text.strip():
+        raise Exception("El body llegó vacío.")
+
+    lineas = [limpiar_linea(x) for x in body_text.splitlines() if limpiar_linea(x)]
 
     print(f"Total de líneas leídas: {len(lineas)}")
-    print("Primeras 120 líneas:")
-    for x in lineas[:120]:
+    print("Primeras 80 líneas:")
+    for x in lineas[:80]:
+        print(x)
+
+    # ---- quedarnos solo con la tabla/lista de candidatos ----
+    ini = None
+    fin = None
+
+    for idx, l in enumerate(lineas):
+        if "Candidatos a la Presidencia de la República" in l:
+            ini = idx
+            break
+
+    for idx, l in enumerate(lineas):
+        if "VOTOS EN BLANCO" in l:
+            fin = idx
+            break
+
+    if ini is None or fin is None or fin <= ini:
+        raise Exception("No se pudo ubicar la sección de la tabla de candidatos.")
+
+    tabla = lineas[ini:fin]
+
+    print(f"Líneas dentro de la tabla: {len(tabla)}")
+    print("Primeras 60 líneas de la tabla:")
+    for x in tabla[:60]:
         print(x)
 
     datos = []
 
-    for i, linea in enumerate(lineas):
-        if "Cantidad de votos:" not in linea:
+    # Patrón esperado en tabla:
+    # NOMBRE
+    # PARTIDO
+    # % validos
+    # % emitidos
+    # Cantidad de votos: X
+    #
+    # A veces puede haber variaciones, así que buscamos por 'Cantidad de votos:'
+    for i, l in enumerate(tabla):
+        if "Cantidad de votos:" not in l:
             continue
 
-        m_votos = re.search(r"Cantidad de votos:\s*([0-9'’.,]+)", linea)
+        m_votos = re.search(r"Cantidad de votos:\s*([0-9'’.,]+)", l)
         if not m_votos:
             continue
 
         votos = votos_a_int(m_votos.group(1))
 
-        # Buscar hacia atrás 2 porcentajes
-        porcentajes = []
-        for j in range(i - 1, max(-1, i - 12), -1):
-            m_pct = re.fullmatch(r"(\d{1,2}[.,]\d{3})\s*%", lineas[j])
-            if m_pct:
-                porcentajes.append((j, pct_a_float(m_pct.group(1))))
-                if len(porcentajes) == 2:
+        # Buscar hacia atrás dos porcentajes: el más lejano es votos válidos
+        pcts = []
+        for j in range(i - 1, max(-1, i - 10), -1):
+            if es_pct(tabla[j]):
+                pcts.append((j, pct_a_float(tabla[j])))
+                if len(pcts) == 2:
                     break
 
-        if len(porcentajes) < 2:
+        if len(pcts) < 2:
             continue
 
-        # segundo más cercano = votos válidos
-        idx_pct_validos, pct_validos = porcentajes[1]
+        idx_pct_validos, pct_validos = pcts[1]
 
+        # Buscar partido y nombre antes del % válido
         previas = []
         for k in range(idx_pct_validos - 1, max(-1, idx_pct_validos - 8), -1):
-            t = lineas[k].lower()
+            t = tabla[k]
 
-            if "cantidad de votos" in t:
+            if es_pct(t):
                 continue
-            if "votos válidos" in t or "votos emitidos" in t:
+            if "Cantidad de votos:" in t:
                 continue
-            if "candidatos a la presidencia" in t:
+            if "Votos válidos" in t or "Votos emitidos" in t:
                 continue
-            if re.fullmatch(r"\d{1,2}[.,]\d{3}\s*%", lineas[k]):
+            if "Nombre del candidato" in t:
                 continue
-            if re.fullmatch(r"[0-9'’.,]+", lineas[k]):
+            if re.fullmatch(r"[0-9'’.,]+", t):
                 continue
 
-            previas.append(lineas[k])
+            previas.append(t)
             if len(previas) == 2:
                 break
 
