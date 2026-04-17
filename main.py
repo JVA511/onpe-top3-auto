@@ -21,7 +21,12 @@ def obtener_top3():
         # OJO: Está en False para que veas el navegador en tu laptop.
         # Cuando lo subas a GitHub Actions, DEBES cambiarlo a headless=True
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-        context = browser.new_context(viewport={"width": 1600, "height": 1000})
+        context = browser.new_context(
+            viewport={"width": 1600, "height": 1000},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            locale="es-PE",
+            timezone_id="America/Lima"
+        )
         page = context.new_page()
 
         print("Abriendo página de la ONPE...")
