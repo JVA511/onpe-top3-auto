@@ -28,49 +28,8 @@ def pct_a_float(txt: str) -> float:
     )
 
 
-def es_porcentaje(linea: str) -> bool:
-    return bool(re.fullmatch(r"\d{1,2}[.,]\d{3}\s*%", linea.strip()))
-
-
 def limpiar_linea(linea: str) -> str:
     return re.sub(r"\s+", " ", linea).strip()
-
-
-def es_linea_basura(linea: str) -> bool:
-    t = linea.lower().strip()
-
-    basura = [
-        "elección de fórmula presidencial",
-        "resultado por ubicación geográfica",
-        "resultado por organización política",
-        "candidatos a la presidencia de la república",
-        "nombre del candidato",
-        "votos válidos",
-        "votos emitidos",
-        "cantidad de votos",
-        "resumen general",
-        "presidencial",
-        "senadores",
-        "diputados",
-        "parlamento andino",
-        "participación ciudadana",
-        "actas",
-        "información",
-        "todos",
-        "votos en blanco",
-        "votos nulos",
-        "total de votos",
-        "inventario de actas contabilizadas",
-    ]
-
-    if any(x in t for x in basura):
-        return True
-
-    # Ejes / números sueltos del gráfico
-    if re.fullmatch(r"[0-9'.,]+", t):
-        return True
-
-    return False
 
 
 def obtener_top3():
@@ -84,22 +43,52 @@ def obtener_top3():
             ],
         )
 
-        page = browser.new_page(viewport={"width": 1600, "height": 3000})
-        page.goto(URL, wait_until="domcontentloaded", timeout=60000)
+        context = browser.new_context(
+            viewport={"width": 1600, "height": 3000},
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/135.0.0.0 Safari/537.36"
+            ),
+            locale="es-PE",
+            timezone_id="America/Lima",
+        )
 
-        # Espera para contenido dinámico
+        page = context.new_page()
+
+        print("Abriendo página...")
+        page.goto(URL, wait_until="networkidle", timeout=90000)
         page.wait_for_timeout(12000)
 
-        # Bajamos un poco para asegurar que la lista esté renderizada
-        page.mouse.wheel(0, 1800)
-        page.wait_for_timeout(3000)
+        # bajar para forzar render
+        page.mouse.wheel(0, 2200)
+        page.wait_for_timeout(4000)
 
-        texto = page.locator("body").inner_text()
+        titulo = page.title()
+        html = page.content()
+        body_text = page.locator("body").inner_text()
+
+        print("Título:", titulo)
+        print("Longitud HTML:", len(html))
+        print("Longitud body_text:", len(body_text))
+
+        # guardar pruebas para revisar en logs/artifacts
+        with open("debug_page.html", "w", encoding="utf-8") as f:
+            f.write(html)
+
+        page.screenshot(path="debug_page.png", full_page=True)
+
         browser.close()
 
-    lineas = [limpiar_linea(x) for x in texto.splitlines() if limpiar_linea(x)]
+    if not body_text.strip():
+        raise Exception("El body llegó vacío. Revisar debug_page.png y debug_page.html")
+
+    lineas = [limpiar_linea(x) for x in body_text.splitlines() if limpiar_linea(x)]
 
     print(f"Total de líneas leídas: {len(lineas)}")
+    print("Primeras 50 líneas:")
+    for x in lineas[:50]:
+        print(x)
 
     datos = []
 
@@ -113,54 +102,45 @@ def obtener_top3():
 
         votos = votos_a_int(m_votos.group(1))
 
-        # Buscar hacia atrás los 2 porcentajes más cercanos
+        # Buscar hacia atrás 2 porcentajes
         porcentajes = []
         for j in range(i - 1, max(-1, i - 12), -1):
-            if es_porcentaje(lineas[j]):
-                porcentajes.append((j, pct_a_float(lineas[j])))
+            m_pct = re.fullmatch(r"(\d{1,2}[.,]\d{3})\s*%", lineas[j])
+            if m_pct:
+                porcentajes.append((j, pct_a_float(m_pct.group(1))))
                 if len(porcentajes) == 2:
                     break
 
-        # Queremos 2 porcentajes:
-        # el más cercano al voto suele ser "votos emitidos"
-        # el segundo más cercano suele ser "votos válidos"
         if len(porcentajes) < 2:
             continue
 
+        # el segundo más cercano suele ser votos válidos
         idx_pct_validos, pct_validos = porcentajes[1]
 
-        # Buscar partido y nombre antes del % de votos válidos
         previas = []
         for k in range(idx_pct_validos - 1, max(-1, idx_pct_validos - 8), -1):
-            candidata = lineas[k]
+            t = lineas[k].lower()
 
-            if es_linea_basura(candidata):
+            if "cantidad de votos" in t:
+                continue
+            if "votos válidos" in t or "votos emitidos" in t:
+                continue
+            if "candidatos a la presidencia" in t:
+                continue
+            if re.fullmatch(r"\d{1,2}[.,]\d{3}\s*%", lineas[k]):
+                continue
+            if re.fullmatch(r"[0-9'’.,]+", lineas[k]):
                 continue
 
-            if es_porcentaje(candidata):
-                continue
-
-            if "Cantidad de votos:" in candidata:
-                continue
-
-            previas.append((k, candidata))
+            previas.append(lineas[k])
             if len(previas) == 2:
                 break
 
         if len(previas) < 2:
             continue
 
-        # previas[0] = partido (más cercano)
-        # previas[1] = nombre (siguiente hacia arriba)
-        partido = previas[0][1]
-        nombre = previas[1][1]
-
-        # Filtros extra
-        if len(partido) < 3 or len(nombre) < 3:
-            continue
-
-        if es_linea_basura(partido) or es_linea_basura(nombre):
-            continue
+        partido = previas[0]
+        nombre = previas[1]
 
         datos.append({
             "nombre": nombre,
@@ -169,17 +149,15 @@ def obtener_top3():
             "pct": pct_validos
         })
 
-    # Quitar duplicados
+    # quitar duplicados
     unicos = []
     vistos = set()
-
     for d in datos:
         clave = (d["nombre"], d["partido"], d["votos"], d["pct"])
         if clave not in vistos:
             vistos.add(clave)
             unicos.append(d)
 
-    # Ordenar por votos
     unicos.sort(key=lambda x: x["votos"], reverse=True)
 
     print("Registros detectados:")
