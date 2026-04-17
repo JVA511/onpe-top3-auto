@@ -2,6 +2,7 @@ from playwright.sync_api import sync_playwright
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timezone, timedelta
+from bs4 import BeautifulSoup
 import os
 import json
 import re
@@ -58,25 +59,19 @@ def obtener_top3():
 
         print("Abriendo página...")
         page.goto(URL, wait_until="networkidle", timeout=90000)
-        page.wait_for_timeout(8000)
+        page.wait_for_timeout(12000)
 
-        # Bajar bastante para forzar la carga completa de la lista inferior
+        # Scroll para ayudar a renderizar
         page.mouse.wheel(0, 3500)
         page.wait_for_timeout(4000)
         page.mouse.wheel(0, 2500)
         page.wait_for_timeout(4000)
 
-        # Volver un poco arriba para que no quede tan abajo
-        page.mouse.wheel(0, -1200)
-        page.wait_for_timeout(3000)
-
         titulo = page.title()
         html = page.content()
-        body_text = page.locator("body").inner_text()
 
         print("Título:", titulo)
         print("Longitud HTML:", len(html))
-        print("Longitud body_text:", len(body_text))
 
         with open("debug_page.html", "w", encoding="utf-8") as f:
             f.write(html)
@@ -85,14 +80,14 @@ def obtener_top3():
 
         browser.close()
 
-    if not body_text.strip():
-        raise Exception("El body llegó vacío. Revisar debug_page.png y debug_page.html")
-
-    lineas = [limpiar_linea(x) for x in body_text.splitlines() if limpiar_linea(x)]
+    # Extraer texto desde HTML, no desde body.inner_text()
+    soup = BeautifulSoup(html, "lxml")
+    texto = soup.get_text("\n", strip=True)
+    lineas = [limpiar_linea(x) for x in texto.splitlines() if limpiar_linea(x)]
 
     print(f"Total de líneas leídas: {len(lineas)}")
-    print("Primeras 80 líneas:")
-    for x in lineas[:80]:
+    print("Primeras 120 líneas:")
+    for x in lineas[:120]:
         print(x)
 
     datos = []
@@ -107,6 +102,7 @@ def obtener_top3():
 
         votos = votos_a_int(m_votos.group(1))
 
+        # Buscar hacia atrás 2 porcentajes
         porcentajes = []
         for j in range(i - 1, max(-1, i - 12), -1):
             m_pct = re.fullmatch(r"(\d{1,2}[.,]\d{3})\s*%", lineas[j])
@@ -118,6 +114,7 @@ def obtener_top3():
         if len(porcentajes) < 2:
             continue
 
+        # segundo más cercano = votos válidos
         idx_pct_validos, pct_validos = porcentajes[1]
 
         previas = []
@@ -152,6 +149,7 @@ def obtener_top3():
             "pct": pct_validos
         })
 
+    # quitar duplicados
     unicos = []
     vistos = set()
     for d in datos:
@@ -170,6 +168,7 @@ def obtener_top3():
         raise Exception(f"No se pudo obtener el top 3. Datos encontrados: {unicos}")
 
     return unicos[:3]
+
 
 def conectar():
     creds_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
