@@ -1,34 +1,30 @@
-name: ONPE Auto
+name: Actualizador ONPE a Sheets
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: "*/10 * * * *"
+    # Corre cada hora (puedes cambiar este cron si lo quieres más o menos frecuente)
+    - cron: '0 * * * *' 
+  workflow_dispatch: # Permite ejecutarlo con un botón manualmente
 
 jobs:
-  run:
+  actualizar-datos:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Descargar el código
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Configurar Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
-      - run: |
+      - name: Instalar librerías
+        run: |
           pip install -r requirements.txt
-          playwright install --with-deps chromium
+          playwright install chromium
 
-      - run: python main.py
+      - name: Ejecutar el script
         env:
+          # Aquí inyectamos tu clave secreta de forma segura
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-
-      - name: Subir archivos de depuración
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-onpe
-          path: |
-            debug_page.png
-            debug_page.html
+        run: python main.py
