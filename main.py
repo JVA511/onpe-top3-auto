@@ -24,14 +24,16 @@ def obtener_top3():
 
     print("Solicitando datos a través de ZenRows...")
     
-    # Parámetros para saltar el bloqueo: habilitamos JavaScript y Proxy Residencial
+    # Parámetros más robustos para evitar el error 422
     params = {
         'url': URL_ONPE,
         'apikey': api_key,
         'js_render': 'true',
-        'wait_for': '.cantidad-votos', # Esperamos a que aparezcan los votos
+        'wait': '15000', # Esperamos 15 segundos exactos a que cargue todo el JS
         'premium_proxy': 'true',
-        'proxy_country': 'pe' # <--- IP DE PERÚ
+        'proxy_country': 'pe',
+        'window_width': '1600',
+        'window_height': '1200'
     }
     
     response = requests.get('https://api.zenrows.com/v1/', params=params)
@@ -100,13 +102,15 @@ def guardar(top3):
     historico.append_row(fila, value_input_option="USER_ENTERED")
 
 def main():
-    try:
-        top3 = obtener_top3()
-        print(f"Top 1: {top3[0]['nombre']}")
-        guardar(top3)
-        print("Éxito total.")
-    except Exception as e:
-        print(f"Error: {e}")
+    print("Ejecutando script...")
+    top3 = obtener_top3()
+    
+    if not top3:
+        raise Exception("El script no pudo extraer ningún dato de la página.")
+        
+    print(f"Top 1 detectado: {top3[0]['nombre']}")
+    guardar(top3)
+    print("¡Datos guardados correctamente en Sheets!")
 
 if __name__ == "__main__":
     main()
