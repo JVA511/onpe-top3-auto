@@ -23,21 +23,12 @@ def obtener_top3():
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        # Cargar página (más tolerante)
         page.goto(URL, wait_until="domcontentloaded", timeout=60000)
 
-        # Esperar carga inicial
-        page.wait_for_timeout(8000)
+        # Esperar más tiempo para que cargue todo
+        page.wait_for_timeout(10000)
 
-        # Click en pestaña
-        page.locator("text=Resultado por organización política").first.click(timeout=60000)
-
-        # Esperar carga del contenido
-        page.wait_for_timeout(5000)
-
-        # Obtener texto completo
         texto = page.locator("body").inner_text()
-
         browser.close()
 
     lineas = [x.strip() for x in texto.splitlines() if x.strip()]
@@ -56,9 +47,8 @@ def obtener_top3():
             nombre = lineas[i-2] if i >= 2 else ""
             partido = lineas[i-1] if i >= 1 else ""
 
-            # Buscar porcentaje cercano
             pct = None
-            for j in range(max(0, i-3), i):
+            for j in range(max(0, i-5), i):
                 if "%" in lineas[j]:
                     m_pct = re.search(r"([0-9]+[.,][0-9]+)", lineas[j])
                     if m_pct:
@@ -68,10 +58,7 @@ def obtener_top3():
             if pct is not None and len(partido) > 2:
                 datos.append((partido, votos, pct))
 
-    # Quitar duplicados
     datos = list(set(datos))
-
-    # Ordenar por votos
     datos.sort(key=lambda x: x[1], reverse=True)
 
     if len(datos) < 3:
