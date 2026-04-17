@@ -117,10 +117,15 @@ def obtener_top3():
     return unicos[:3]
 
 def conectar():
-    creds_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+    with open("service_account.json", "r", encoding="utf-8") as f:
+        creds_json = json.load(f)
+
     creds = Credentials.from_service_account_info(
         creds_json,
-        scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
     )
     return gspread.authorize(creds).open(SHEET_NAME)
 
@@ -131,8 +136,8 @@ def guardar(top3):
         historico = sheet.worksheet("Historico")
 
         p1, p2, p3 = top3
-        dif_votos = abs(p1["votos"] - p2["votos"])
-        dif_pct = round(abs(p1["pct"] - p2["pct"]), 3)
+        dif_votos = abs(p2["votos"] - p3["votos"])
+        dif_pct = round(abs(p2["pct"] - p3["pct"]), 3)
 
         lima = timezone(timedelta(hours=-5))
         fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
