@@ -58,11 +58,17 @@ def obtener_top3():
 
         print("Abriendo página...")
         page.goto(URL, wait_until="networkidle", timeout=90000)
-        page.wait_for_timeout(12000)
+        page.wait_for_timeout(8000)
 
-        # bajar para forzar render
-        page.mouse.wheel(0, 2200)
+        # Bajar bastante para forzar la carga completa de la lista inferior
+        page.mouse.wheel(0, 3500)
         page.wait_for_timeout(4000)
+        page.mouse.wheel(0, 2500)
+        page.wait_for_timeout(4000)
+
+        # Volver un poco arriba para que no quede tan abajo
+        page.mouse.wheel(0, -1200)
+        page.wait_for_timeout(3000)
 
         titulo = page.title()
         html = page.content()
@@ -72,7 +78,6 @@ def obtener_top3():
         print("Longitud HTML:", len(html))
         print("Longitud body_text:", len(body_text))
 
-        # guardar pruebas para revisar en logs/artifacts
         with open("debug_page.html", "w", encoding="utf-8") as f:
             f.write(html)
 
@@ -86,8 +91,8 @@ def obtener_top3():
     lineas = [limpiar_linea(x) for x in body_text.splitlines() if limpiar_linea(x)]
 
     print(f"Total de líneas leídas: {len(lineas)}")
-    print("Primeras 50 líneas:")
-    for x in lineas[:50]:
+    print("Primeras 80 líneas:")
+    for x in lineas[:80]:
         print(x)
 
     datos = []
@@ -102,7 +107,6 @@ def obtener_top3():
 
         votos = votos_a_int(m_votos.group(1))
 
-        # Buscar hacia atrás 2 porcentajes
         porcentajes = []
         for j in range(i - 1, max(-1, i - 12), -1):
             m_pct = re.fullmatch(r"(\d{1,2}[.,]\d{3})\s*%", lineas[j])
@@ -114,7 +118,6 @@ def obtener_top3():
         if len(porcentajes) < 2:
             continue
 
-        # el segundo más cercano suele ser votos válidos
         idx_pct_validos, pct_validos = porcentajes[1]
 
         previas = []
@@ -149,7 +152,6 @@ def obtener_top3():
             "pct": pct_validos
         })
 
-    # quitar duplicados
     unicos = []
     vistos = set()
     for d in datos:
@@ -161,7 +163,7 @@ def obtener_top3():
     unicos.sort(key=lambda x: x["votos"], reverse=True)
 
     print("Registros detectados:")
-    for x in unicos[:10]:
+    for x in unicos[:15]:
         print(x)
 
     if len(unicos) < 3:
@@ -169,12 +171,14 @@ def obtener_top3():
 
     return unicos[:3]
 
-
 def conectar():
     creds_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
     creds = Credentials.from_service_account_info(
         creds_json,
-        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
     )
     return gspread.authorize(creds).open(SHEET_NAME)
 
@@ -186,8 +190,8 @@ def guardar(top3):
 
     p1, p2, p3 = top3
 
-    dif_votos = p2["votos"] - p3["votos"]
-    dif_pct = round(p2["pct"] - p3["pct"], 3)
+    dif_votos = abs(p2["votos"] - p3["votos"])
+    dif_pct = round(abs(p2["pct"] - p3["pct"]), 3)
 
     lima = timezone(timedelta(hours=-5))
     fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
