@@ -2,86 +2,115 @@ import requests
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timezone, timedelta
+from bs4 import BeautifulSoup
 import os
 import json
-import time
+import re
 
-# Configuración de URLs (Las rutas que confirmaste en VS Code)
-BASE_API = "https://resultadoelectoral.onpe.gob.pe/presentacion-backend"
-URLS = {
-    "VOTOS": f"{BASE_API}/participantes-ubicacion-geografica-nombre?idEleccion=10&tipoFiltro=eleccion",
-    "AVANCE_T": f"{BASE_API}/resumen-general/totales?idEleccion=10&tipoFiltro=eleccion",
-    "AVANCE_P": f"{BASE_API}/resumen-general/totales?idAmbitoGeografico=1&idEleccion=10&tipoFiltro=ambito_geografico",
-    "AVANCE_E": f"{BASE_API}/resumen-general/totales?idAmbitoGeografico=2&idEleccion=10&tipoFiltro=ambito_geografico"
-}
+# CONFIGURACIÓN
+URL_ONPE = "https://resultadoelectoral.onpe.gob.pe/main/presidenciales"
+SHEET_NAME = "ONPE Top 3"
 
-def obtener_json(url, api_key):
-    params = {'url': url, 'apikey': api_key, 'premium_proxy': 'true', 'proxy_country': 'pe'}
-    try:
-        r = requests.get('https://api.zenrows.com/v1/', params=params, timeout=30)
-        return r.json() if r.status_code == 200 else None
-    except:
-        return None
+def votos_a_int(txt: str) -> int:
+    return int(txt.replace("'", "").replace("’", "").replace(",", "").replace(".", "").strip())
 
-def conectar_google():
-    # En GitHub Actions usamos la variable de entorno para no subir el archivo JSON
+def pct_a_float(txt: str) -> float:
+    return float(txt.replace("%", "").replace(",", ".").strip())
+
+def obtener_top3():
+    api_key = os.environ.get("ZENROWS_API_KEY")
+    if not api_key:
+        raise Exception("Falta la API Key de ZenRows en los Secrets.")
+
+    print("Solicitando datos a través de ZenRows...")
+    
+    # Parámetros más robustos para evitar el error 422
+    params = {
+        'url': URL_ONPE,
+        'apikey': api_key,
+        'js_render': 'true',
+        'wait': '15000', # Esperamos 15 segundos exactos a que cargue todo el JS
+        'premium_proxy': 'true',
+        'proxy_country': 'pe',
+        'window_width': '1600',
+        'window_height': '1200'
+    }
+    
+    response = requests.get('https://api.zenrows.com/v1/', params=params)
+    
+    if response.status_code != 200:
+        raise Exception(f"Error de ZenRows: {response.status_code} - {response.text}")
+
+    soup = BeautifulSoup(response.content, "lxml")
+    texto = soup.get_text("\n", strip=True)
+    lineas = texto.splitlines()
+
+    candidatos = []
+    for i, linea in enumerate(lineas):
+        if "Cantidad de votos:" in linea:
+            votos_texto = linea.replace("Cantidad de votos:", "").strip()
+            if not votos_texto and (i + 1) < len(lineas):
+                votos_texto = lineas[i + 1].strip()
+
+            try:
+                votos = votos_a_int(votos_texto)
+            except ValueError:
+                continue
+
+            porcentajes = []
+            partido, nombre = None, None
+
+            for j in range(i - 1, max(-1, i - 15), -1):
+                txt = lineas[j].strip()
+                if not txt or re.fullmatch(r"[0-9\s'’.,]+", txt): continue
+                if "votos" in txt.lower() or "presidencia" in txt.lower(): continue
+                
+                if "%" in txt:
+                    porcentajes.append(pct_a_float(txt))
+                    continue
+
+                if len(porcentajes) >= 2:
+                    if not partido: partido = txt; continue
+                    if not nombre: nombre = txt; break 
+
+            if nombre and partido and len(porcentajes) >= 2:
+                candidatos.append({"nombre": nombre, "partido": partido, "votos": votos, "pct": porcentajes[1]})
+
+    unicos = []
+    vistos = set()
+    for c in candidatos:
+        if (c["nombre"], c["partido"]) not in vistos:
+            vistos.add((c["nombre"], c["partido"]))
+            unicos.append(c)
+
+    unicos.sort(key=lambda x: x["votos"], reverse=True)
+    return unicos[:3]
+
+def conectar():
     creds_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
-    creds = Credentials.from_service_account_info(creds_json, scopes=[
-        "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"
-    ])
-    return gspread.authorize(creds).open("ONPE Top 3")
+    creds = Credentials.from_service_account_info(creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+    return gspread.authorize(creds).open(SHEET_NAME)
+
+def guardar(top3):
+    sheet = conectar()
+    resumen, historico = sheet.worksheet("Resumen"), sheet.worksheet("Historico")
+    p1, p2, p3 = top3
+    lima = timezone(timedelta(hours=-5))
+    fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
+    fila = [fecha, p1["partido"], p2["partido"], p3["partido"], p1["votos"], p2["votos"], p3["votos"], p1["pct"], p2["pct"], p3["pct"], abs(p2["votos"] - p3["votos"]), round(abs(p2["pct"] - p3["pct"]), 3)]
+    resumen.update("A2:L2", [fila])
+    historico.append_row(fila, value_input_option="USER_ENTERED")
 
 def main():
-    api_key = os.environ.get("ZENROWS_API_KEY")
+    print("Ejecutando script...")
+    top3 = obtener_top3()
     
-    # 1. Descarga de datos (La lógica de tu test_api.py)
-    data_votos = obtener_json(URLS["VOTOS"], api_key)
-    time.sleep(1) 
-    data_t = obtener_json(URLS["AVANCE_T"], api_key)
-    data_p = obtener_json(URLS["AVANCE_P"], api_key)
-    data_e = obtener_json(URLS["AVANCE_E"], api_key)
-
-    if not all([data_votos, data_t, data_p, data_e]):
-        print("Error: Falló la descarga de datos desde la API.")
-        return
-
-    # 2. Extracción de datos (Rutas confirmadas en tu respuesta_onpe.json)
-    top3 = data_votos['data']['rVotacion'][:3]
-    p1, p2, p3 = top3
-
-    pct_t = data_t['data']['actasContabilizadas']
-    pct_p = data_p['data']['actasContabilizadas']
-    pct_e = data_e['data']['actasContabilizadas']
-
-    # 3. Limpieza de datos
-    def limpio_int(v): return int(str(v).replace(',', '').replace('.', ''))
-    def limpio_float(v): return float(str(v).replace(',', '.'))
-
-    fecha = (datetime.now(timezone.utc) - timedelta(hours=5)).strftime("%d/%m/%Y %H:%M:%S")
-
-    # 4. Construcción de la fila para Sheets (Columnas A hasta O)
-    fila = [
-        fecha, 
-        p1['nombre_organizacion'], p2['nombre_organizacion'], p3['nombre_organizacion'],
-        limpio_int(p1['votos_total']), limpio_int(p2['votos_total']), limpio_int(p3['votos_total']),
-        limpio_float(p1['porcentaje_votos_validos']), limpio_float(p2['porcentaje_votos_validos']), limpio_float(p3['porcentaje_votos_validos']),
-        limpio_int(p2['votos_total']) - limpio_int(p3['votos_total']), # Diferencia de votos
-        round(abs(limpio_float(p2['porcentaje_votos_validos']) - limpio_float(p3['porcentaje_votos_validos'])), 3),
-        limpio_float(pct_t), limpio_float(pct_p), limpio_float(pct_e)
-    ]
-
-    # 5. Envío a Google Sheets
-    try:
-        ss = conectar_google()
-        resumen = ss.worksheet("Resumen")
-        historico = ss.worksheet("Historico")
+    if not top3:
+        raise Exception("El script no pudo extraer ningún dato de la página.")
         
-        # Actualizar celda de control y añadir al historial
-        resumen.update(range_name="A2:O2", values=[fila])
-        historico.append_row(fila, value_input_option="USER_ENTERED")
-        print(f"✅ Sincronización exitosa: {pct_t}% contabilizado.")
-    except Exception as e:
-        print(f"Error al guardar en Sheets: {e}")
+    print(f"Top 1 detectado: {top3[0]['nombre']}")
+    guardar(top3)
+    print("¡Datos guardados correctamente en Sheets!")
 
 if __name__ == "__main__":
     main()
