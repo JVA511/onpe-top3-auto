@@ -59,17 +59,17 @@ def extraer_datos_pagina(html):
     return candidatos, avance_actas
 
 def obtener_todo(api_key):
-    # Definimos las instrucciones para que ZenRows haga CLIC por nosotros
+    # Instrucciones precisas para que el bot haga clic en el dropdown y elija la opción
     vistas_config = {
-        "TODOS": None, # No hace falta hacer nada extra
+        "TODOS": None,
         "PERU": [
-            {"click": ".select-filter-ambito"}, # Abre el menú (basado en la clase común de ONPE)
-            {"click": "text=PERÚ"}, # Busca y hace clic en el texto PERÚ
-            {"wait": 3000} # Espera a que la tabla refresque
+            {"click": ".dropdown-toggle:has-text('TODOS')"}, # Abre el menú que marcaste en rojo
+            {"click": "a.dropdown-item:has-text('PERÚ')"},   # Selecciona PERÚ
+            {"wait": 3000} # Espera que refresque el gráfico
         ],
         "EXTRANJERO": [
-            {"click": ".select-filter-ambito"},
-            {"click": "text=EXTRANJERO"},
+            {"click": ".dropdown-toggle:has-text('TODOS')"},
+            {"click": "a.dropdown-item:has-text('EXTRANJERO')"},
             {"wait": 3000}
         ]
     }
@@ -77,8 +77,8 @@ def obtener_todo(api_key):
     resultados = {}
     top3_final = []
 
-    for nombre_vista, instrucciones in vistas_config.items():
-        print(f"Consultando vista: {nombre_vista}...")
+    for nombre_vista, pasos in vistas_config.items():
+        print(f"Ejecutando interacción para: {nombre_vista}...")
         
         params = {
             'url': URL_ONPE,
@@ -86,12 +86,11 @@ def obtener_todo(api_key):
             'js_render': 'true',
             'premium_proxy': 'true',
             'proxy_country': 'pe',
-            'wait': '10000' # Espera inicial
+            'wait': '10000'
         }
         
-        # Si hay clics que hacer, se los mandamos en formato JSON
-        if instrucciones:
-            params['js_instructions'] = json.dumps(instrucciones)
+        if pasos:
+            params['js_instructions'] = json.dumps(pasos)
         
         response = requests.get('https://api.zenrows.com/v1/', params=params)
         
@@ -101,7 +100,7 @@ def obtener_todo(api_key):
             if nombre_vista == "TODOS":
                 top3_final = cands
         else:
-            print(f"Error en {nombre_vista}: {response.status_code}")
+            print(f"Fallo en {nombre_vista}: {response.status_code}")
             resultados[nombre_vista] = 0.0
 
     unicos = []
@@ -141,9 +140,9 @@ def main():
     try:
         api_key = os.environ.get("ZENROWS_API_KEY")
         top3, avances = obtener_todo(api_key)
-        if not top3: raise Exception("No se pudo obtener el Top 3.")
+        if not top3: raise Exception("Datos incompletos.")
         guardar(top3, avances)
-        print(f"Éxito. Avance Total: {avances['TODOS']}% | Perú: {avances['PERU']}% | Extranjero: {avances['EXTRANJERO']}%")
+        print(f"OK. T: {avances['TODOS']}% | P: {avances['PERU']}% | E: {avances['EXTRANJERO']}%")
     except Exception as e:
         print(f"Error: {e}")
 
