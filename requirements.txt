@@ -1,6 +1,5 @@
 requests
-playwright
-beautifulsoup4
-lxml
 gspread
 google-auth
+beautifulsoup4
+lxml
