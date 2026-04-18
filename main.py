@@ -98,8 +98,22 @@ def guardar(top3):
     lima = timezone(timedelta(hours=-5))
     fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
     fila = [fecha, p1["partido"], p2["partido"], p3["partido"], p1["votos"], p2["votos"], p3["votos"], p1["pct"], p2["pct"], p3["pct"], abs(p2["votos"] - p3["votos"]), round(abs(p2["pct"] - p3["pct"]), 3)]
-    resumen.update("A2:L2", [fila])
-    historico.append_row(fila, value_input_option="USER_ENTERED")
+    resumen = sheet.worksheet("Resumen")
+    historico = sheet.worksheet("Historico")
+
+    # Actualiza el Resumen (A2:L2)
+    resumen.update(range_name="A2:L2", values=[fila])
+    
+    # --- EL TRUCO DEL FRANCOTIRADOR ---
+    # 1. Contamos cuántas celdas tienen texto en la Columna 1 (Columna A)
+    col_a = historico.col_values(1)
+    siguiente_fila = len(col_a) + 1 # Nos da la primera fila realmente vacía
+    
+    # 2. Inyectamos a la fuerza desde la A hasta la L en esa fila
+    rango_historico = f"A{siguiente_fila}:L{siguiente_fila}"
+    historico.update(range_name=rango_historico, values=[fila])
+    
+    print(f"\nDatos subidos a la Fila {siguiente_fila} con éxito.")
 
 def main():
     print("Ejecutando script...")
