@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 import os
 import json
 
-# CONFIGURACIÓN DE LAS APIs (Basado en tu descubrimiento)
+# URLs de la API (Tus descubrimientos)
 BASE_API = "https://resultadoelectoral.onpe.gob.pe/presentacion-backend/resumen-general"
 URLS = {
     "TODOS": f"{BASE_API}/totales?idEleccion=10&tipoFiltro=eleccion",
@@ -17,7 +17,6 @@ URLS = {
 SHEET_NAME = "ONPE Top 3"
 
 def obtener_datos_api(url, api_key):
-    # Ya NO necesitamos js_render ni wait porque es un JSON directo
     params = {
         'url': url,
         'apikey': api_key,
@@ -36,46 +35,49 @@ def main():
     try:
         api_key = os.environ.get("ZENROWS_API_KEY")
         
-        # 1. Obtener porcentajes de avance
-        pct_todos = obtener_datos_api(URLS["TODOS"], api_key)['actas']['porcentajeContabilizado']
-        pct_peru = obtener_datos_api(URLS["PERU"], api_key)['actas']['porcentajeContabilizado']
-        pct_ext = obtener_datos_api(URLS["EXTRANJERO"], api_key)['actas']['porcentajeContabilizado']
+        # 1. Capturar JSONs
+        res_todos = obtener_datos_api(URLS["TODOS"], api_key)
+        res_peru = obtener_datos_api(URLS["PERU"], api_key)
+        res_ext = obtener_datos_api(URLS["EXTRANJERO"], api_key)
+        res_cands = obtener_datos_api(URLS["CANDIDATOS"], api_key)
+
+        # 2. Extraer porcentajes usando la ruta de tus capturas: data -> actasContabilizadas
+        pct_todos = res_todos['data']['actasContabilizadas']
+        pct_peru = res_peru['data']['actasContabilizadas']
+        pct_ext = res_ext['data']['actasContabilizadas']
         
-        # 2. Obtener votos del Top 3 (de la API de participantes)
-        data_cands = obtener_datos_api(URLS["CANDIDATOS"], api_key)
-        # Asumiendo que vienen ordenados por votos, tomamos los 3 primeros
-        top3 = data_cands['rVotacion'][:3] 
+        # 3. Extraer candidatos (asumiendo que siguen en 'data' -> 'rVotacion')
+        # Si esto falla, revisa el JSON de candidatos igual que hiciste con estos
+        top3 = res_cands['data']['rVotacion'][:3]
         
-        # 3. Preparar la fila para Google Sheets
+        # 4. Preparar fila
         lima = timezone(timedelta(hours=-5))
         fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
-        
         p1, p2, p3 = top3
-        # Limpiamos los porcentajes (quitar el % y pasar a float)
-        def clean_pct(val): return float(val.replace(',', '.'))
+        
+        def clean_num(v): return int(str(v).replace(',', '').replace('.', ''))
+        def clean_pct(v): return float(str(v).replace(',', '.'))
 
         fila = [
-            fecha, 
-            p1['nombre_organizacion'], p2['nombre_organizacion'], p3['nombre_organizacion'],
-            int(p1['votos_total'].replace(',', '')), int(p2['votos_total'].replace(',', '')), int(p3['votos_total'].replace(',', '')),
+            fecha, p1['nombre_organizacion'], p2['nombre_organizacion'], p3['nombre_organizacion'],
+            clean_num(p1['votos_total']), clean_num(p2['votos_total']), clean_num(p3['votos_total']),
             clean_pct(p1['porcentaje_votos_validos']), clean_pct(p2['porcentaje_votos_validos']), clean_pct(p3['porcentaje_votos_validos']),
-            int(p2['votos_total'].replace(',', '')) - int(p3['votos_total'].replace(',', '')),
+            clean_num(p2['votos_total']) - clean_num(p3['votos_total']),
             round(abs(clean_pct(p2['porcentaje_votos_validos']) - clean_pct(p3['porcentaje_votos_validos'])), 3),
             clean_pct(pct_todos), clean_pct(pct_peru), clean_pct(pct_ext)
         ]
 
-        # 4. Guardar en Sheets
+        # 5. Guardar
         sheet = conectar_google()
-        resumen = sheet.worksheet("Resumen")
-        historico = sheet.worksheet("Historico")
+        sheet.worksheet("Resumen").update(range_name="A2:O2", values=[fila])
+        sheet.worksheet("Historico").append_row(fila, value_input_option="USER_ENTERED")
         
-        resumen.update(range_name="A2:O2", values=[fila])
-        historico.append_row(fila, value_input_option="USER_ENTERED")
-        
-        print(f"Éxito Total: {pct_todos} | Perú: {pct_peru} | Ext: {pct_ext}")
+        print(f"¡Éxito! Avance Total: {pct_todos}%")
 
     except Exception as e:
         print(f"Error técnico: {e}")
+        # Si falla, imprimimos el JSON para ver qué pasó
+        if 'res_todos' in locals(): print(f"JSON recibido: {res_todos}")
 
 if __name__ == "__main__":
     main()
