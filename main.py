@@ -59,20 +59,22 @@ def extraer_datos_pagina(html):
     return candidatos, avance_actas
 
 def obtener_todo(api_key):
-    # Usamos los selectores de Angular Material que encontraste
+    # Usamos los selectores técnicos de Angular Material que encontraste
     vistas_config = {
         "TODOS": None,
         "PERU": [
-            {"click": "mat-select[formcontrolname='region']"}, # Selector preciso del disparador
-            {"wait_for": "mat-option"}, # Esperamos a que aparezcan las opciones flotantes
-            {"click": "mat-option:has-text('PERÚ')"}, # Clic en la opción con el texto exacto
-            {"wait": 8000} # Tiempo para que Angular refresque los datos
+            {"wait_for": "mat-select[formcontrolname='region']"},
+            {"click": "mat-select[formcontrolname='region']"}, # Clic en el disparador
+            {"wait_for": "mat-option"}, # Esperamos que aparezca el menú flotante
+            {"click": "mat-option >> text='PERÚ'"}, # Seleccionamos Perú
+            {"wait": 10000} # Tiempo de gracia para que Angular actualice el estado
         ],
         "EXTRANJERO": [
+            {"wait_for": "mat-select[formcontrolname='region']"},
             {"click": "mat-select[formcontrolname='region']"},
             {"wait_for": "mat-option"},
-            {"click": "mat-option:has-text('EXTRANJERO')"},
-            {"wait": 8000}
+            {"click": "mat-option >> text='EXTRANJERO'"},
+            {"wait": 10000}
         ]
     }
     
@@ -80,7 +82,7 @@ def obtener_todo(api_key):
     top3_final = []
 
     for nombre_vista, pasos in vistas_config.items():
-        print(f"Consultando vista: {nombre_vista}...")
+        print(f"Sincronizando vista: {nombre_vista}...")
         
         params = {
             'url': URL_ONPE,
@@ -88,7 +90,7 @@ def obtener_todo(api_key):
             'js_render': 'true',
             'premium_proxy': 'true',
             'proxy_country': 'pe',
-            'window_width': '1920',
+            'window_width': '1920', # Forzamos escritorio para que el menú no se oculte
             'window_height': '1080',
             'wait': '10000'
         }
@@ -103,12 +105,12 @@ def obtener_todo(api_key):
             resultados[nombre_vista] = avance
             if nombre_vista == "TODOS":
                 top3_final = cands
-            print(f"Dato obtenido para {nombre_vista}: {avance}%")
+            print(f"-> {nombre_vista}: {avance}% capturado.")
         else:
             print(f"Error en {nombre_vista}: {response.status_code}")
             resultados[nombre_vista] = 0.0
 
-    # Limpieza de duplicados
+    # Limpieza y ordenamiento (se mantiene igual)
     unicos = []
     vistos = set()
     for c in top3_final:
@@ -124,6 +126,7 @@ def conectar():
     creds = Credentials.from_service_account_info(creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     return gspread.authorize(creds).open(SHEET_NAME)
 
+# Arreglo para el aviso naranja de "DeprecationWarning"
 def guardar(top3, avances):
     sheet = conectar()
     resumen, historico = sheet.worksheet("Resumen"), sheet.worksheet("Historico")
@@ -139,7 +142,7 @@ def guardar(top3, avances):
         avances.get("TODOS", 0), avances.get("PERU", 0), avances.get("EXTRANJERO", 0)
     ]
     
-    # Arreglo del orden de argumentos para evitar el DeprecationWarning
+    # Sintaxis actualizada para evitar errores futuros
     resumen.update(range_name="A2:O2", values=[fila])
     historico.append_row(fila, value_input_option="USER_ENTERED")
 
