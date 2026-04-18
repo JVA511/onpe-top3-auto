@@ -59,19 +59,19 @@ def extraer_datos_pagina(html):
     return candidatos, avance_actas
 
 def obtener_todo(api_key):
-    # Usamos selectores mucho más potentes y específicos
+    # Usamos los selectores de Angular Material que encontraste
     vistas_config = {
         "TODOS": None,
         "PERU": [
-            {"click": "button.dropdown-toggle:has-text('TODOS')"}, # Clic al botón que marcaste en rojo
-            {"wait": 3000}, # Esperamos a que el menú se abra
-            {"click": "ul.dropdown-menu a:has-text('PERÚ')"}, # Clic al link exacto de Perú
-            {"wait": 8000} # Espera larga para que los números cambien
+            {"click": "mat-select[formcontrolname='region']"}, # Selector preciso del disparador
+            {"wait_for": "mat-option"}, # Esperamos a que aparezcan las opciones flotantes
+            {"click": "mat-option:has-text('PERÚ')"}, # Clic en la opción con el texto exacto
+            {"wait": 8000} # Tiempo para que Angular refresque los datos
         ],
         "EXTRANJERO": [
-            {"click": "button.dropdown-toggle:has-text('TODOS')"},
-            {"wait": 3000},
-            {"click": "ul.dropdown-menu a:has-text('EXTRANJERO')"},
+            {"click": "mat-select[formcontrolname='region']"},
+            {"wait_for": "mat-option"},
+            {"click": "mat-option:has-text('EXTRANJERO')"},
             {"wait": 8000}
         ]
     }
@@ -80,7 +80,7 @@ def obtener_todo(api_key):
     top3_final = []
 
     for nombre_vista, pasos in vistas_config.items():
-        print(f"Iniciando captura de {nombre_vista}...")
+        print(f"Consultando vista: {nombre_vista}...")
         
         params = {
             'url': URL_ONPE,
@@ -88,6 +88,8 @@ def obtener_todo(api_key):
             'js_render': 'true',
             'premium_proxy': 'true',
             'proxy_country': 'pe',
+            'window_width': '1920',
+            'window_height': '1080',
             'wait': '10000'
         }
         
@@ -103,7 +105,7 @@ def obtener_todo(api_key):
                 top3_final = cands
             print(f"Dato obtenido para {nombre_vista}: {avance}%")
         else:
-            print(f"Fallo en {nombre_vista}. Status: {response.status_code}")
+            print(f"Error en {nombre_vista}: {response.status_code}")
             resultados[nombre_vista] = 0.0
 
     # Limpieza de duplicados
