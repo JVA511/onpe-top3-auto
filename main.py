@@ -59,20 +59,20 @@ def extraer_datos_pagina(html):
     return candidatos, avance_actas
 
 def obtener_todo(api_key):
-    # Usamos selectores CSS específicos del menú de la ONPE
+    # Usamos selectores mucho más potentes y específicos
     vistas_config = {
         "TODOS": None,
         "PERU": [
-            {"click": ".dropdown-toggle"}, # Abre el menú "TODOS"
-            {"wait": 2000},
-            {"click": ".dropdown-item >> text='PERÚ'"}, # Busca el item de lista con ese texto
-            {"wait": 7000} # La ONPE es lenta procesando el filtro, esperamos 7s
+            {"click": "button.dropdown-toggle:has-text('TODOS')"}, # Clic al botón que marcaste en rojo
+            {"wait": 3000}, # Esperamos a que el menú se abra
+            {"click": "ul.dropdown-menu a:has-text('PERÚ')"}, # Clic al link exacto de Perú
+            {"wait": 8000} # Espera larga para que los números cambien
         ],
         "EXTRANJERO": [
-            {"click": ".dropdown-toggle"},
-            {"wait": 2000},
-            {"click": ".dropdown-item >> text='EXTRANJERO'"},
-            {"wait": 7000}
+            {"click": "button.dropdown-toggle:has-text('TODOS')"},
+            {"wait": 3000},
+            {"click": "ul.dropdown-menu a:has-text('EXTRANJERO')"},
+            {"wait": 8000}
         ]
     }
     
@@ -106,7 +106,7 @@ def obtener_todo(api_key):
             print(f"Fallo en {nombre_vista}. Status: {response.status_code}")
             resultados[nombre_vista] = 0.0
 
-    # Limpieza de duplicados y ordenamiento
+    # Limpieza de duplicados
     unicos = []
     vistos = set()
     for c in top3_final:
@@ -137,7 +137,8 @@ def guardar(top3, avances):
         avances.get("TODOS", 0), avances.get("PERU", 0), avances.get("EXTRANJERO", 0)
     ]
     
-    resumen.update("A2:O2", [fila])
+    # Arreglo del orden de argumentos para evitar el DeprecationWarning
+    resumen.update(range_name="A2:O2", values=[fila])
     historico.append_row(fila, value_input_option="USER_ENTERED")
 
 def main():
