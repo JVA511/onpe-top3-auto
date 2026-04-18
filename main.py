@@ -59,22 +59,20 @@ def extraer_datos_pagina(html):
     return candidatos, avance_actas
 
 def obtener_todo(api_key):
-    # Instrucciones mejoradas: clic por texto exacto y esperas de seguridad
+    # Usamos selectores CSS específicos del menú de la ONPE
     vistas_config = {
         "TODOS": None,
         "PERU": [
-            {"wait_for": ".dropdown-toggle"}, # Espera a que el botón exista
-            {"click": ".dropdown-toggle"},    # Haz clic en el botón de ubicación
-            {"wait": 2000},                   # Espera a que el menú se despliegue
-            {"click": "text='PERÚ'"},          # Busca el texto exacto
-            {"wait": 5000}                    # Tiempo para que el gráfico cambie
+            {"click": ".dropdown-toggle"}, # Abre el menú "TODOS"
+            {"wait": 2000},
+            {"click": ".dropdown-item >> text='PERÚ'"}, # Busca el item de lista con ese texto
+            {"wait": 7000} # La ONPE es lenta procesando el filtro, esperamos 7s
         ],
         "EXTRANJERO": [
-            {"wait_for": ".dropdown-toggle"},
             {"click": ".dropdown-toggle"},
             {"wait": 2000},
-            {"click": "text='EXTRANJERO'"},
-            {"wait": 5000}
+            {"click": ".dropdown-item >> text='EXTRANJERO'"},
+            {"wait": 7000}
         ]
     }
     
@@ -82,7 +80,7 @@ def obtener_todo(api_key):
     top3_final = []
 
     for nombre_vista, pasos in vistas_config.items():
-        print(f"Iniciando captura de vista: {nombre_vista}...")
+        print(f"Iniciando captura de {nombre_vista}...")
         
         params = {
             'url': URL_ONPE,
@@ -103,12 +101,12 @@ def obtener_todo(api_key):
             resultados[nombre_vista] = avance
             if nombre_vista == "TODOS":
                 top3_final = cands
-            print(f"Vista {nombre_vista} capturada: {avance}%")
+            print(f"Dato obtenido para {nombre_vista}: {avance}%")
         else:
-            print(f"Error en {nombre_vista}: {response.status_code}")
+            print(f"Fallo en {nombre_vista}. Status: {response.status_code}")
             resultados[nombre_vista] = 0.0
 
-    # (El resto de la lógica de limpieza de duplicados se mantiene igual)
+    # Limpieza de duplicados y ordenamiento
     unicos = []
     vistos = set()
     for c in top3_final:
