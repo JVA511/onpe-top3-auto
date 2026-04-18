@@ -2,115 +2,110 @@ import requests
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timezone, timedelta
-from bs4 import BeautifulSoup
-import os
 import json
-import re
+import time
+import os
 
-# CONFIGURACIÓN
-URL_ONPE = "https://resultadoelectoral.onpe.gob.pe/main/presidenciales"
+# --- CONFIGURACIÓN DE GITHUB ---
 SHEET_NAME = "ONPE Top 3"
 
-def votos_a_int(txt: str) -> int:
-    return int(txt.replace("'", "").replace("’", "").replace(",", "").replace(".", "").strip())
+VISTAS = {
+    "peru": "https://resultadoelectoral.onpe.gob.pe/presentacion-backend/resumen-general/totales?idAmbitoGeografico=1&idEleccion=10&tipoFiltro=ambito_geografico",
+    "extranjero": "https://resultadoelectoral.onpe.gob.pe/presentacion-backend/resumen-general/totales?idAmbitoGeografico=2&idEleccion=10&tipoFiltro=ambito_geografico",
+    "todos": "https://resultadoelectoral.onpe.gob.pe/presentacion-backend/resumen-general/totales?idEleccion=10&tipoFiltro=eleccion"
+}
 
-def pct_a_float(txt: str) -> float:
-    return float(txt.replace("%", "").replace(",", ".").strip())
-
-def obtener_top3():
-    api_key = os.environ.get("ZENROWS_API_KEY")
-    if not api_key:
-        raise Exception("Falta la API Key de ZenRows en los Secrets.")
-
-    print("Solicitando datos a través de ZenRows...")
-    
-    # Parámetros más robustos para evitar el error 422
-    params = {
-        'url': URL_ONPE,
-        'apikey': api_key,
-        'js_render': 'true',
-        'wait': '15000', # Esperamos 15 segundos exactos a que cargue todo el JS
-        'premium_proxy': 'true',
-        'proxy_country': 'pe',
-        'window_width': '1600',
-        'window_height': '1200'
-    }
-    
-    response = requests.get('https://api.zenrows.com/v1/', params=params)
-    
-    if response.status_code != 200:
-        raise Exception(f"Error de ZenRows: {response.status_code} - {response.text}")
-
-    soup = BeautifulSoup(response.content, "lxml")
-    texto = soup.get_text("\n", strip=True)
-    lineas = texto.splitlines()
-
-    candidatos = []
-    for i, linea in enumerate(lineas):
-        if "Cantidad de votos:" in linea:
-            votos_texto = linea.replace("Cantidad de votos:", "").strip()
-            if not votos_texto and (i + 1) < len(lineas):
-                votos_texto = lineas[i + 1].strip()
-
-            try:
-                votos = votos_a_int(votos_texto)
-            except ValueError:
-                continue
-
-            porcentajes = []
-            partido, nombre = None, None
-
-            for j in range(i - 1, max(-1, i - 15), -1):
-                txt = lineas[j].strip()
-                if not txt or re.fullmatch(r"[0-9\s'’.,]+", txt): continue
-                if "votos" in txt.lower() or "presidencia" in txt.lower(): continue
-                
-                if "%" in txt:
-                    porcentajes.append(pct_a_float(txt))
-                    continue
-
-                if len(porcentajes) >= 2:
-                    if not partido: partido = txt; continue
-                    if not nombre: nombre = txt; break 
-
-            if nombre and partido and len(porcentajes) >= 2:
-                candidatos.append({"nombre": nombre, "partido": partido, "votos": votos, "pct": porcentajes[1]})
-
-    unicos = []
-    vistos = set()
-    for c in candidatos:
-        if (c["nombre"], c["partido"]) not in vistos:
-            vistos.add((c["nombre"], c["partido"]))
-            unicos.append(c)
-
-    unicos.sort(key=lambda x: x["votos"], reverse=True)
-    return unicos[:3]
-
-def conectar():
+def conectar_google():
+    # En GitHub, leemos el JSON de Google desde las variables secretas
     creds_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
-    creds = Credentials.from_service_account_info(creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+    creds = Credentials.from_service_account_info(
+        creds_json, 
+        scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    )
     return gspread.authorize(creds).open(SHEET_NAME)
 
-def guardar(top3):
-    sheet = conectar()
-    resumen, historico = sheet.worksheet("Resumen"), sheet.worksheet("Historico")
-    p1, p2, p3 = top3
+def main():
+    # En GitHub, leemos la llave de ZenRows desde las variables secretas
+    zenrows_api_key = os.environ.get("ZENROWS_API_KEY")
+    if not zenrows_api_key:
+        print("🚨 Error: No se encontró ZENROWS_API_KEY en los Secrets de GitHub.")
+        return
+
+    datos_extraidos = {}
+    
+    for nombre, url in VISTAS.items():
+        print(f"📡 Descargando datos de: {nombre.upper()}...")
+        
+        params = {
+            'url': url,
+            'apikey': zenrows_api_key,
+            'premium_proxy': 'true',
+            'proxy_country': 'pe',
+            'antibot': 'true'
+        }
+        
+        try:
+            response = requests.get('https://api.zenrows.com/v1/', params=params, timeout=45)
+            
+            if response.status_code == 200:
+                datos = response.json()
+                
+                avance = datos['data']['actasContabilizadas']
+                contabilizadas = datos['data']['contabilizadas']
+                enviadas_jee = datos['data']['enviadasJee']
+                pendientes_jee = datos['data']['pendientesJee']
+                
+                datos_extraidos[nombre] = [avance, contabilizadas, enviadas_jee, pendientes_jee]
+                
+                print(f"✅ Descarga completada: {nombre}")
+                print(f"   ▶ Avance: {avance}%")
+                print(f"   ▶ Actas Contabilizadas: {contabilizadas}")
+                print(f"   ▶ Enviadas al JEE: {enviadas_jee}")
+                print(f"   ▶ Pendientes JEE: {pendientes_jee}\n")
+            else:
+                print(f"❌ Error en {nombre}: {response.status_code}\n")
+                
+        except Exception as e:
+            print(f"💥 Error de red con {nombre}: {e}\n")
+            
+        time.sleep(1)
+
+    if len(datos_extraidos) < 3:
+        print("🛑 No se pudieron descargar todos los datos. Abortando subida a Sheets.")
+        return
+
+    print("📊 Preparando envío a Google Sheets...")
+    
+    def c_int(v): return int(str(v).replace(',', '').replace('.', ''))
+    def c_float(v): return float(str(v).replace(',', '.'))
+    
     lima = timezone(timedelta(hours=-5))
     fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
-    fila = [fecha, p1["partido"], p2["partido"], p3["partido"], p1["votos"], p2["votos"], p3["votos"], p1["pct"], p2["pct"], p3["pct"], abs(p2["votos"] - p3["votos"]), round(abs(p2["pct"] - p3["pct"]), 3)]
-    resumen.update("A2:L2", [fila])
-    historico.append_row(fila, value_input_option="USER_ENTERED")
 
-def main():
-    print("Ejecutando script...")
-    top3 = obtener_top3()
-    
-    if not top3:
-        raise Exception("El script no pudo extraer ningún dato de la página.")
+    dp = datos_extraidos["peru"]
+    de = datos_extraidos["extranjero"]
+    dt = datos_extraidos["todos"]
+
+    actas_valores = [
+        c_float(dt[0]), c_float(dp[0]), c_float(de[0]), 
+        c_int(dt[1]), c_int(dt[2]), c_int(dt[3]),       
+        c_int(dp[1]), c_int(dp[2]), c_int(dp[3]),       
+        c_int(de[1]), c_int(de[2]), c_int(de[3])        
+    ]
+
+    fila_historico = [fecha] + [""] * 11 + actas_valores
+
+    try:
+        sheet = conectar_google()
+        resumen = sheet.worksheet("Resumen")
+        historico = sheet.worksheet("Historico")
         
-    print(f"Top 1 detectado: {top3[0]['nombre']}")
-    guardar(top3)
-    print("¡Datos guardados correctamente en Sheets!")
+        resumen.update(range_name="A2", values=[[fecha]])
+        resumen.update(range_name="M2:X2", values=[actas_valores])
+        historico.append_row(fila_historico, value_input_option="USER_ENTERED")
+        print("✅ ¡Datos de actas subidos a Google Sheets (A partir de la columna M)!")
+    except Exception as e:
+        print(f"⚠️ Error al guardar en Sheets: {e}")
 
 if __name__ == "__main__":
     main()
