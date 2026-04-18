@@ -1,22 +1,36 @@
-name: Actualizador ONPE ZenRows
+name: Actualizar Datos ONPE
 
 on:
   schedule:
-    - cron: '0 */2 * * *' # CORRE CADA 2 HORAS
-  workflow_dispatch:
+    - cron: '0 */2 * * *' # Corre cada 2 horas
+  workflow_dispatch: # Permite correrlo manualmente
 
 jobs:
-  actualizar:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Instalar dependencias
-        run: pip install -r requirements.txt
-      - name: Ejecutar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install chromium # Necesario para main.py
+
+      - name: Ejecutar Scraper Visual (main.py)
         env:
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: python main.py
+
+      - name: Ejecutar Scraper API (api_to_sheets.py)
+        env:
+          ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: python api_to_sheets.py
