@@ -65,20 +65,19 @@ def main():
         resumen = sheet.worksheet("Resumen")
         historico = sheet.worksheet("Historico")
         
-        # 1. Actualizamos el resumen (Fijo en M2:X2)
+        # Actualizamos el resumen (Fijo en M2:X2)
         resumen.update(range_name="M2:X2", values=[actas_valores])
         
-        # 2. EL TRUCO: Buscamos cuántas filas tiene el Histórico
-        todas_las_filas = historico.get_all_values()
-        ultima_fila = len(todas_las_filas) # Nos da el número de la última fila escrita por main.py
+        # --- EL TRUCO DEL FRANCOTIRADOR ---
+        # 1. Buscamos cuál fue la última fila que main.py acaba de llenar en la Columna A
+        col_a = historico.col_values(1)
+        ultima_fila = len(col_a) 
         
-        # 3. Actualizamos solo de la M a la X en esa última fila exacta
+        # 2. Inyectamos de la M a la X en esa fila exacta
         rango_historico = f"M{ultima_fila}:X{ultima_fila}"
         historico.update(range_name=rango_historico, values=[actas_valores])
         
         print(f"✅ ¡Datos de actas inyectados perfectamente en la Fila {ultima_fila}!")
-    except Exception as e:
-        print(f"⚠️ Error en Sheets: {e}")
-
+        
 if __name__ == "__main__":
     main()
