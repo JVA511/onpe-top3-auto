@@ -1,8 +1,8 @@
-name: Actualizador ONPE ZenRows
+name: Actualizador ONPE Unificado
 
 on:
   schedule:
-    - cron: '0 */2 * * *' # CORRE CADA 2 HORAS
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -14,8 +14,10 @@ jobs:
         with:
           python-version: '3.11'
       - name: Instalar dependencias
-        run: pip install -r requirements.txt
-      - name: Ejecutar
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium
+      - name: Ejecutar Bot
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
