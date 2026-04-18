@@ -2,159 +2,80 @@ import requests
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timezone, timedelta
-from bs4 import BeautifulSoup
 import os
 import json
-import re
 
-# CONFIGURACIÓN
-URL_ONPE = "https://resultadoelectoral.onpe.gob.pe/main/presidenciales"
+# CONFIGURACIÓN DE LAS APIs (Basado en tu descubrimiento)
+BASE_API = "https://resultadoelectoral.onpe.gob.pe/presentacion-backend/resumen-general"
+URLS = {
+    "TODOS": f"{BASE_API}/totales?idEleccion=10&tipoFiltro=eleccion",
+    "PERU": f"{BASE_API}/totales?idAmbitoGeografico=1&idEleccion=10&tipoFiltro=ambito_geografico",
+    "EXTRANJERO": f"{BASE_API}/totales?idAmbitoGeografico=2&idEleccion=10&tipoFiltro=ambito_geografico",
+    "CANDIDATOS": f"{BASE_API}/participantes-ubicacion-geografica-nombre?idEleccion=10&tipoFiltro=eleccion"
+}
+
 SHEET_NAME = "ONPE Top 3"
 
-def votos_a_int(txt: str) -> int:
-    return int(txt.replace("'", "").replace("’", "").replace(",", "").replace(".", "").strip())
-
-def pct_a_float(txt: str) -> float:
-    num = re.search(r"(\d+[\.,]\d+)", txt)
-    return float(num.group(1).replace(",", ".")) if num else 0.0
-
-def extraer_datos_pagina(html):
-    soup = BeautifulSoup(html, "lxml")
-    texto = soup.get_text("\n", strip=True)
-    lineas = texto.splitlines()
-
-    avance_actas = 0.0
-    for i, linea in enumerate(lineas):
-        if "Actas contabilizadas" in linea:
-            for k in range(1, 5):
-                if (i + k) < len(lineas) and "%" in lineas[i + k]:
-                    avance_actas = pct_a_float(lineas[i + k])
-                    break
-            break
-
-    candidatos = []
-    for i, linea in enumerate(lineas):
-        if "Cantidad de votos:" in linea:
-            votos_texto = linea.replace("Cantidad de votos:", "").strip()
-            if not votos_texto and (i + 1) < len(lineas):
-                votos_texto = lineas[i + 1].strip()
-            try:
-                votos = votos_a_int(votos_texto)
-            except:
-                continue
-            porcentajes = []
-            partido, nombre = None, None
-            for j in range(i - 1, max(-1, i - 15), -1):
-                txt = lineas[j].strip()
-                if not txt or re.fullmatch(r"[0-9\s'’.,]+", txt): continue
-                if "votos" in txt.lower() or "presidencia" in txt.lower(): continue
-                if "%" in txt:
-                    porcentajes.append(pct_a_float(txt))
-                    continue
-                if len(porcentajes) >= 2:
-                    if not partido: partido = txt; continue
-                    if not nombre: nombre = txt; break 
-            if nombre and partido and len(porcentajes) >= 2:
-                candidatos.append({"nombre": nombre, "partido": partido, "votos": votos, "pct": porcentajes[1]})
-    return candidatos, avance_actas
-
-def obtener_todo(api_key):
-    # Usamos los selectores técnicos de Angular Material que encontraste
-    vistas_config = {
-        "TODOS": None,
-        "PERU": [
-            {"wait_for": "mat-select[formcontrolname='region']"},
-            {"click": "mat-select[formcontrolname='region']"}, # Clic en el disparador
-            {"wait_for": "mat-option"}, # Esperamos que aparezca el menú flotante
-            {"click": "mat-option >> text='PERÚ'"}, # Seleccionamos Perú
-            {"wait": 10000} # Tiempo de gracia para que Angular actualice el estado
-        ],
-        "EXTRANJERO": [
-            {"wait_for": "mat-select[formcontrolname='region']"},
-            {"click": "mat-select[formcontrolname='region']"},
-            {"wait_for": "mat-option"},
-            {"click": "mat-option >> text='EXTRANJERO'"},
-            {"wait": 10000}
-        ]
+def obtener_datos_api(url, api_key):
+    # Ya NO necesitamos js_render ni wait porque es un JSON directo
+    params = {
+        'url': url,
+        'apikey': api_key,
+        'premium_proxy': 'true',
+        'proxy_country': 'pe'
     }
-    
-    resultados = {}
-    top3_final = []
+    response = requests.get('https://api.zenrows.com/v1/', params=params)
+    return response.json() if response.status_code == 200 else None
 
-    for nombre_vista, pasos in vistas_config.items():
-        print(f"Sincronizando vista: {nombre_vista}...")
-        
-        params = {
-            'url': URL_ONPE,
-            'apikey': api_key,
-            'js_render': 'true',
-            'premium_proxy': 'true',
-            'proxy_country': 'pe',
-            'window_width': '1920', # Forzamos escritorio para que el menú no se oculte
-            'window_height': '1080',
-            'wait': '10000'
-        }
-        
-        if pasos:
-            params['js_instructions'] = json.dumps(pasos)
-        
-        response = requests.get('https://api.zenrows.com/v1/', params=params)
-        
-        if response.status_code == 200:
-            cands, avance = extraer_datos_pagina(response.content)
-            resultados[nombre_vista] = avance
-            if nombre_vista == "TODOS":
-                top3_final = cands
-            print(f"-> {nombre_vista}: {avance}% capturado.")
-        else:
-            print(f"Error en {nombre_vista}: {response.status_code}")
-            resultados[nombre_vista] = 0.0
-
-    # Limpieza y ordenamiento (se mantiene igual)
-    unicos = []
-    vistos = set()
-    for c in top3_final:
-        if (c["nombre"], c["partido"]) not in vistos:
-            vistos.add((c["nombre"], c["partido"]))
-            unicos.append(c)
-    unicos.sort(key=lambda x: x["votos"], reverse=True)
-
-    return unicos[:3], resultados
-
-def conectar():
+def conectar_google():
     creds_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
     creds = Credentials.from_service_account_info(creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     return gspread.authorize(creds).open(SHEET_NAME)
 
-# Arreglo para el aviso naranja de "DeprecationWarning"
-def guardar(top3, avances):
-    sheet = conectar()
-    resumen, historico = sheet.worksheet("Resumen"), sheet.worksheet("Historico")
-    p1, p2, p3 = top3
-    lima = timezone(timedelta(hours=-5))
-    fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
-    
-    fila = [
-        fecha, p1["partido"], p2["partido"], p3["partido"], 
-        p1["votos"], p2["votos"], p3["votos"], 
-        p1["pct"], p2["pct"], p3["pct"], 
-        abs(p2["votos"] - p3["votos"]), round(abs(p2["pct"] - p3["pct"]), 3),
-        avances.get("TODOS", 0), avances.get("PERU", 0), avances.get("EXTRANJERO", 0)
-    ]
-    
-    # Sintaxis actualizada para evitar errores futuros
-    resumen.update(range_name="A2:O2", values=[fila])
-    historico.append_row(fila, value_input_option="USER_ENTERED")
-
 def main():
     try:
         api_key = os.environ.get("ZENROWS_API_KEY")
-        top3, avances = obtener_todo(api_key)
-        if not top3: raise Exception("Datos incompletos.")
-        guardar(top3, avances)
-        print(f"OK. T: {avances['TODOS']}% | P: {avances['PERU']}% | E: {avances['EXTRANJERO']}%")
+        
+        # 1. Obtener porcentajes de avance
+        pct_todos = obtener_datos_api(URLS["TODOS"], api_key)['actas']['porcentajeContabilizado']
+        pct_peru = obtener_datos_api(URLS["PERU"], api_key)['actas']['porcentajeContabilizado']
+        pct_ext = obtener_datos_api(URLS["EXTRANJERO"], api_key)['actas']['porcentajeContabilizado']
+        
+        # 2. Obtener votos del Top 3 (de la API de participantes)
+        data_cands = obtener_datos_api(URLS["CANDIDATOS"], api_key)
+        # Asumiendo que vienen ordenados por votos, tomamos los 3 primeros
+        top3 = data_cands['rVotacion'][:3] 
+        
+        # 3. Preparar la fila para Google Sheets
+        lima = timezone(timedelta(hours=-5))
+        fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
+        
+        p1, p2, p3 = top3
+        # Limpiamos los porcentajes (quitar el % y pasar a float)
+        def clean_pct(val): return float(val.replace(',', '.'))
+
+        fila = [
+            fecha, 
+            p1['nombre_organizacion'], p2['nombre_organizacion'], p3['nombre_organizacion'],
+            int(p1['votos_total'].replace(',', '')), int(p2['votos_total'].replace(',', '')), int(p3['votos_total'].replace(',', '')),
+            clean_pct(p1['porcentaje_votos_validos']), clean_pct(p2['porcentaje_votos_validos']), clean_pct(p3['porcentaje_votos_validos']),
+            int(p2['votos_total'].replace(',', '')) - int(p3['votos_total'].replace(',', '')),
+            round(abs(clean_pct(p2['porcentaje_votos_validos']) - clean_pct(p3['porcentaje_votos_validos'])), 3),
+            clean_pct(pct_todos), clean_pct(pct_peru), clean_pct(pct_ext)
+        ]
+
+        # 4. Guardar en Sheets
+        sheet = conectar_google()
+        resumen = sheet.worksheet("Resumen")
+        historico = sheet.worksheet("Historico")
+        
+        resumen.update(range_name="A2:O2", values=[fila])
+        historico.append_row(fila, value_input_option="USER_ENTERED")
+        
+        print(f"Éxito Total: {pct_todos} | Perú: {pct_peru} | Ext: {pct_ext}")
+
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error técnico: {e}")
 
 if __name__ == "__main__":
     main()
