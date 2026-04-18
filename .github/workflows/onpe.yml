@@ -3,7 +3,7 @@ name: Actualizador ONPE ZenRows
 on:
   schedule:
     - cron: '0 */2 * * *' # CORRE CADA 2 HORAS
-  workflow_dispatch: # Te permite correrlo manualmente con el botón
+  workflow_dispatch:
 
 jobs:
   actualizar:
@@ -13,11 +13,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
       - name: Instalar dependencias
         run: pip install -r requirements.txt
-        
-      - name: Ejecutar Scraper API (main.py)
+      - name: Ejecutar
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
