@@ -60,6 +60,7 @@ def main():
         c_int(de[1]), c_int(de[2]), c_int(de[3])        
     ]
 
+    # 3. Subida a Sheets
     try:
         sheet = conectar_google()
         resumen = sheet.worksheet("Resumen")
@@ -79,5 +80,9 @@ def main():
         
         print(f"✅ ¡Datos de actas inyectados perfectamente en la Fila {ultima_fila}!")
         
+    # ESTA ES LA PARTE QUE FALTABA
+    except Exception as e:
+        print(f"⚠️ Error en Sheets: {e}")
+
 if __name__ == "__main__":
     main()
