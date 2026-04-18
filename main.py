@@ -59,18 +59,22 @@ def extraer_datos_pagina(html):
     return candidatos, avance_actas
 
 def obtener_todo(api_key):
-    # Instrucciones precisas para que el bot haga clic en el dropdown y elija la opción
+    # Instrucciones mejoradas: clic por texto exacto y esperas de seguridad
     vistas_config = {
         "TODOS": None,
         "PERU": [
-            {"click": ".dropdown-toggle:has-text('TODOS')"}, # Abre el menú que marcaste en rojo
-            {"click": "a.dropdown-item:has-text('PERÚ')"},   # Selecciona PERÚ
-            {"wait": 3000} # Espera que refresque el gráfico
+            {"wait_for": ".dropdown-toggle"}, # Espera a que el botón exista
+            {"click": ".dropdown-toggle"},    # Haz clic en el botón de ubicación
+            {"wait": 2000},                   # Espera a que el menú se despliegue
+            {"click": "text='PERÚ'"},          # Busca el texto exacto
+            {"wait": 5000}                    # Tiempo para que el gráfico cambie
         ],
         "EXTRANJERO": [
-            {"click": ".dropdown-toggle:has-text('TODOS')"},
-            {"click": "a.dropdown-item:has-text('EXTRANJERO')"},
-            {"wait": 3000}
+            {"wait_for": ".dropdown-toggle"},
+            {"click": ".dropdown-toggle"},
+            {"wait": 2000},
+            {"click": "text='EXTRANJERO'"},
+            {"wait": 5000}
         ]
     }
     
@@ -78,7 +82,7 @@ def obtener_todo(api_key):
     top3_final = []
 
     for nombre_vista, pasos in vistas_config.items():
-        print(f"Ejecutando interacción para: {nombre_vista}...")
+        print(f"Iniciando captura de vista: {nombre_vista}...")
         
         params = {
             'url': URL_ONPE,
@@ -99,10 +103,12 @@ def obtener_todo(api_key):
             resultados[nombre_vista] = avance
             if nombre_vista == "TODOS":
                 top3_final = cands
+            print(f"Vista {nombre_vista} capturada: {avance}%")
         else:
-            print(f"Fallo en {nombre_vista}: {response.status_code}")
+            print(f"Error en {nombre_vista}: {response.status_code}")
             resultados[nombre_vista] = 0.0
 
+    # (El resto de la lógica de limpieza de duplicados se mantiene igual)
     unicos = []
     vistos = set()
     for c in top3_final:
