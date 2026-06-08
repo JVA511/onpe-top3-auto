@@ -52,13 +52,14 @@ def main():
     de = datos_extraidos["extranjero"]
     dt = datos_extraidos["todos"]
 
-    # Ordenamos los 14 valores (Actas + Votos Totales)
+    # Ordenamos los 16 valores (Actas + Votos Totales y Segmentados)
     actas_valores = [
         c_float(dt[0]), c_float(dp[0]), c_float(de[0]), 
         c_int(dt[1]), c_int(dt[2]), c_int(dt[3]),       
         c_int(dp[1]), c_int(dp[2]), c_int(dp[3]),       
         c_int(de[1]), c_int(de[2]), c_int(de[3]),
-        c_int(dt[4]), c_int(dt[5])  # <-- Aquí entran los Emitidos y Válidos
+        c_int(dt[4]), c_int(dt[5]),  # V: Emitidos Total, W: Válidos Total
+        c_int(dp[4]), c_int(de[4])   # X: Emitidos Perú, Y: Emitidos Extranjero
     ]
 
 # 3. Subida a Sheets
@@ -67,15 +68,15 @@ def main():
         resumen = sheet.worksheet("Resumen")
         historico = sheet.worksheet("Historico")
         
-        # Actualizamos el resumen (Fijo en J2:W2)
-        resumen.update(range_name="J2:W2", values=[actas_valores])
+        # Actualizamos el resumen (Fijo en J2:Y2)
+        resumen.update(range_name="J2:Y2", values=[actas_valores])
         
         # --- EL TRUCO DEL FRANCOTIRADOR ---
         col_a = historico.col_values(1)
         ultima_fila = len(col_a) 
         
-        # Inyectamos de la J a la W en esa fila exacta
-        rango_historico = f"J{ultima_fila}:W{ultima_fila}"
+        # Inyectamos de la J a la Y en esa fila exacta
+        rango_historico = f"J{ultima_fila}:Y{ultima_fila}"
         historico.update(range_name=rango_historico, values=[actas_valores])
         
         print(f"✅ ¡Datos de actas inyectados perfectamente en la Fila {ultima_fila}!")
