@@ -84,46 +84,55 @@ def obtener_top3():
             unicos.append(c)
 
     unicos.sort(key=lambda x: x["votos"], reverse=True)
-    return unicos[:3]
+    return unicos[:2]
 
 def conectar():
     creds_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
     creds = Credentials.from_service_account_info(creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     return gspread.authorize(creds).open(SHEET_NAME)
 
-def guardar(top3):
+def guardar(top2):
     sheet = conectar()
-    resumen, historico = sheet.worksheet("Resumen"), sheet.worksheet("Historico")
-    p1, p2, p3 = top3
-    lima = timezone(timedelta(hours=-5))
-    fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
-    fila = [fecha, p1["partido"], p2["partido"], p3["partido"], p1["votos"], p2["votos"], p3["votos"], p1["pct"], p2["pct"], p3["pct"], abs(p2["votos"] - p3["votos"]), round(abs(p2["pct"] - p3["pct"]), 3)]
     resumen = sheet.worksheet("Resumen")
     historico = sheet.worksheet("Historico")
+    
+    # Solo desempaquetamos a los 2 candidatos
+    p1, p2 = top2 
+    lima = timezone(timedelta(hours=-5))
+    fecha = datetime.now(lima).strftime("%d/%m/%Y %H:%M:%S")
+    
+    # LA NUEVA MATEMÁTICA: p1 vs p2 (Ocupa exactamente 9 elementos)
+    fila = [
+        fecha, 
+        p1["partido"], p2["partido"], 
+        p1["votos"], p2["votos"], 
+        p1["pct"], p2["pct"], 
+        abs(p1["votos"] - p2["votos"]), 
+        round(abs(p1["pct"] - p2["pct"]), 3)
+    ]
 
-    # Actualiza el Resumen (A2:L2)
-    resumen.update(range_name="A2:L2", values=[fila])
+    # Actualiza el Resumen (A2:I2)
+    resumen.update(range_name="A2:I2", values=[fila])
     
     # --- EL TRUCO DEL FRANCOTIRADOR ---
-    # 1. Contamos cuántas celdas tienen texto en la Columna 1 (Columna A)
     col_a = historico.col_values(1)
-    siguiente_fila = len(col_a) + 1 # Nos da la primera fila realmente vacía
+    siguiente_fila = len(col_a) + 1 
     
-    # 2. Inyectamos a la fuerza desde la A hasta la L en esa fila
-    rango_historico = f"A{siguiente_fila}:L{siguiente_fila}"
+    # Inyectamos a la fuerza desde la A hasta la I
+    rango_historico = f"A{siguiente_fila}:I{siguiente_fila}"
     historico.update(range_name=rango_historico, values=[fila])
     
     print(f"\nDatos subidos a la Fila {siguiente_fila} con éxito.")
 
 def main():
     print("Ejecutando script...")
-    top3 = obtener_top3()
+    top2 = obtener_top3() # Sigue usando el mismo nombre de función, pero trae 2
     
-    if not top3:
-        raise Exception("El script no pudo extraer ningún dato de la página.")
+    if not top2 or len(top2) < 2:
+        raise Exception("El script no pudo extraer los 2 candidatos.")
         
-    print(f"Top 1 detectado: {top3[0]['nombre']}")
-    guardar(top3)
+    print(f"Top 1 detectado: {top2[0]['nombre']}")
+    guardar(top2)
     print("¡Datos guardados correctamente en Sheets!")
 
 if __name__ == "__main__":
