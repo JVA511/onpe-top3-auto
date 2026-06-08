@@ -8,7 +8,7 @@ import json
 import re
 
 # CONFIGURACIÓN
-URL_ONPE = "https://resultadoelectoral.onpe.gob.pe/main/presidenciales"
+URL_ONPE = "https://resultadosegundavuelta.onpe.gob.pe/main/resumen"
 SHEET_NAME = "ONPE Top 3"
 
 def votos_a_int(txt: str) -> int:
