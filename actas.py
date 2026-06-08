@@ -5,7 +5,7 @@ import json
 import time
 import os
 
-SHEET_NAME = "ONPE Top 3"
+SHEET_NAME = "ONPE SEGUNDA VUELTA"
 
 VISTAS = {
     "peru": "https://resultadosegundavuelta.onpe.gob.pe/presentacion-backend/resumen-general/totales?idEleccion=10&tipoFiltro=ambito_geografico&idAmbitoGeografico=1",
