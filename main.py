@@ -129,17 +129,25 @@ def main():
     guardar(top2)
     print("¡Datos guardados correctamente en Sheets!")
 
-    # --- AQUÍ EMPIEZA EL PASO 3 (ALERTA DE TELEGRAM CON FORMATO COMPLETO) ---
+    # --- AQUÍ EMPIEZA EL PASO 3 (ALERTA DE TELEGRAM CON PROYECCIONES) ---
     candidato_1 = top2[0]
     candidato_2 = top2[1]
 
-    # 1. Nos conectamos al Excel para leer TODA la fila 2 de la hoja Resumen
+    # 1. Nos conectamos al Excel y buscamos la hoja Histórico
     sheet = conectar()
-    resumen = sheet.worksheet("Resumen")
-    fila = resumen.row_values(2)
+    historico = sheet.worksheet("Historico")
+    
+    # Obtenemos la última fila que se acaba de guardar para tener los datos más frescos
+    ultima_fila = len(historico.col_values(1))
+    fila = historico.row_values(ultima_fila)
 
-    # 2. Extraemos los valores de las columnas basándonos en sus índices (Col A = 0, B = 1...)
-    # Votos y Diferencia (Columnas D, E, H)
+    # Truco de seguridad: Rellenamos la lista con vacíos por si Google recorta celdas sin datos
+    if len(fila) < 76:
+        fila += [''] * (76 - len(fila))
+
+    # 2. Extraemos los valores por índice (A=0, B=1, ... BV=73)
+    
+    # Votos y Diferencia Actual (Columnas D, E, H)
     votos_1 = fila[3]      
     votos_2 = fila[4]      
     dif_votos = fila[7]    
@@ -164,7 +172,12 @@ def main():
     jee_env_ext = fila[19] 
     jee_pend_ext = fila[20]
 
-    # 3. Armamos el mensaje con formato, negritas (*) y emojis
+    # Proyecciones (Columnas BV, BW, BX)
+    proy_fp = fila[73]
+    proy_jp = fila[74]
+    dif_proy = fila[75]
+
+    # 3. Armamos el mega mensaje con formato, negritas (*) y emojis
     texto_alerta = (
         f"🚨 *REPORTE ONPE ACTUALIZADO* 🚨\n\n"
         
@@ -176,31 +189,35 @@ def main():
         f"📊 Porcentaje: {candidato_2['pct']}%\n"
         f"🗳️ Votos: {votos_2}\n\n"
         
-        f"⚖️ *DIFERENCIA:* {dif_votos} votos\n"
-        f"--------------------------------------\n"
+        f"⚖️ *DIFERENCIA ACTUAL:* {dif_votos} votos\n"
+        f"------------------------------------\n"
         f"📈 *% ACTAS PROCESADAS*\n"
         f"🌍 Total: {pct_total}%\n"
         f"🇵🇪 Perú: {pct_peru}%\n"
         f"✈️ Extranjero: {pct_ext}%\n"
-        f"--------------------------------------\n"
-        f"📦 *ESTADO DE ACTAS - TOTAL*\n"
+        f"------------------------------------\n"
+        f"📦 *ACTAS - TOTAL*\n"
         f"✅ Contabilizadas: {cont_tot}\n"
         f"🏛️ Enviadas JEE: {jee_env_tot}\n"
         f"⏳ Pendientes JEE: {jee_pend_tot}\n"
-        f"--------------------------------------\n"
-        f"🇵🇪 *ESTADO DE ACTAS - PERÚ*\n"
+        f"------------------------------------\n"
+        f"🇵🇪 *ACTAS - PERÚ*\n"
         f"✅ Contabilizadas: {cont_pe}\n"
         f"🏛️ Enviadas JEE: {jee_env_pe}\n"
         f"⏳ Pendientes JEE: {jee_pend_pe}\n"
-        f"--------------------------------------\n"
-        f"✈️ *ESTADO DE ACTAS - EXTRANJERO*\n"
+        f"------------------------------------\n"
+        f"✈️ *ACTAS - EXTRANJERO*\n"
         f"✅ Contabilizadas: {cont_ext}\n"
         f"🏛️ Enviadas JEE: {jee_env_ext}\n"
         f"⏳ Pendientes JEE: {jee_pend_ext}\n"
+        f"------------------------------------\n"
+        f"🔮 *PROYECCIÓN AL 100%*\n"
+        f"🟠 Proy. FP: {proy_fp}\n"
+        f"🟢 Proy. JP: {proy_jp}\n"
+        f"⚖️ *Dif. Proyectada:* {dif_proy}\n"
     )
 
     # Disparamos el mensaje al grupo
     enviar_telegram(texto_alerta)
-
 if __name__ == "__main__":
     main()
