@@ -60,27 +60,26 @@ def main():
         c_int(de[1]), c_int(de[2]), c_int(de[3])        
     ]
 
-    # 3. Subida a Sheets
+# 3. Subida a Sheets
     try:
         sheet = conectar_google()
         resumen = sheet.worksheet("Resumen")
         historico = sheet.worksheet("Historico")
         
-        # Actualizamos el resumen (Fijo en M2:X2)
-        resumen.update(range_name="M2:X2", values=[actas_valores])
+        # Actualizamos el resumen (Fijo en J2:U2)
+        resumen.update(range_name="J2:U2", values=[actas_valores])
         
         # --- EL TRUCO DEL FRANCOTIRADOR ---
         # 1. Buscamos cuál fue la última fila que main.py acaba de llenar en la Columna A
         col_a = historico.col_values(1)
         ultima_fila = len(col_a) 
         
-        # 2. Inyectamos de la M a la X en esa fila exacta
-        rango_historico = f"M{ultima_fila}:X{ultima_fila}"
+        # 2. Inyectamos de la J a la U en esa fila exacta
+        rango_historico = f"J{ultima_fila}:U{ultima_fila}"
         historico.update(range_name=rango_historico, values=[actas_valores])
         
         print(f"✅ ¡Datos de actas inyectados perfectamente en la Fila {ultima_fila}!")
         
-    # ESTA ES LA PARTE QUE FALTABA
     except Exception as e:
         print(f"⚠️ Error en Sheets: {e}")
 
