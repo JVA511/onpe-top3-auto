@@ -9,7 +9,7 @@ import re
 
 # CONFIGURACIÓN
 url = "https://resultadosegundavuelta.onpe.gob.pe/presentacion-backend/resumen-general/participantes?idEleccion=10&tipoFiltro=eleccion"
-SHEET_NAME = "ONPE Top 3"
+SHEET_NAME = "ONPE SEGUNDA VUELTA"
 
 def votos_a_int(txt: str) -> int:
     return int(txt.replace("'", "").replace("’", "").replace(",", "").replace(".", "").strip())
