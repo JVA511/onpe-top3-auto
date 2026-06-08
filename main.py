@@ -22,18 +22,15 @@ def obtener_top3():
     if not api_key:
         raise Exception("Falta la API Key de ZenRows en los Secrets.")
 
-    print("Solicitando datos a través de ZenRows...")
+    print("Solicitando datos JSON a través de ZenRows...")
     
-    # Parámetros más robustos para evitar el error 422
+    # Parámetros optimizados para API: sin esperas largas ni renderizado gráfico
     params = {
         'url': url,
         'apikey': api_key,
-        'js_render': 'true',
-        'wait': '15000', # Esperamos 15 segundos exactos a que cargue todo el JS
         'premium_proxy': 'true',
         'proxy_country': 'pe',
-        'window_width': '1600',
-        'window_height': '1200'
+        'antibot': 'true'
     }
     
     response = requests.get('https://api.zenrows.com/v1/', params=params)
@@ -41,50 +38,25 @@ def obtener_top3():
     if response.status_code != 200:
         raise Exception(f"Error de ZenRows: {response.status_code} - {response.text}")
 
-    soup = BeautifulSoup(response.content, "lxml")
-    texto = soup.get_text("\n", strip=True)
-    lineas = texto.splitlines()
+    # --- LA MAGIA DEL JSON ---
+    datos_json = response.json()
+    lista_participantes = datos_json["data"]
 
     candidatos = []
-    for i, linea in enumerate(lineas):
-        if "Cantidad de votos:" in linea:
-            votos_texto = linea.replace("Cantidad de votos:", "").strip()
-            if not votos_texto and (i + 1) < len(lineas):
-                votos_texto = lineas[i + 1].strip()
+    
+    # Recorremos la lista del JSON extrayendo solo lo que necesitamos
+    for participante in lista_participantes:
+        candidatos.append({
+            "nombre": participante["nombreCandidato"],
+            "partido": participante["nombreAgrupacionPolitica"],
+            "votos": participante["totalVotosValidos"],
+            "pct": participante["porcentajeVotosValidos"]
+        })
 
-            try:
-                votos = votos_a_int(votos_texto)
-            except ValueError:
-                continue
-
-            porcentajes = []
-            partido, nombre = None, None
-
-            for j in range(i - 1, max(-1, i - 15), -1):
-                txt = lineas[j].strip()
-                if not txt or re.fullmatch(r"[0-9\s'’.,]+", txt): continue
-                if "votos" in txt.lower() or "presidencia" in txt.lower(): continue
-                
-                if "%" in txt:
-                    porcentajes.append(pct_a_float(txt))
-                    continue
-
-                if len(porcentajes) >= 2:
-                    if not partido: partido = txt; continue
-                    if not nombre: nombre = txt; break 
-
-            if nombre and partido and len(porcentajes) >= 2:
-                candidatos.append({"nombre": nombre, "partido": partido, "votos": votos, "pct": porcentajes[1]})
-
-    unicos = []
-    vistos = set()
-    for c in candidatos:
-        if (c["nombre"], c["partido"]) not in vistos:
-            vistos.add((c["nombre"], c["partido"]))
-            unicos.append(c)
-
-    unicos.sort(key=lambda x: x["votos"], reverse=True)
-    return unicos[:2]
+    # Ordenamos de mayor a menor cantidad de votos (para que el Top 1 siempre sea p1)
+    candidatos.sort(key=lambda x: x["votos"], reverse=True)
+    
+    return candidatos[:2]
 
 def conectar():
     creds_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
