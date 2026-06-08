@@ -13,6 +13,106 @@ VISTAS = {
     "todos": "https://resultadosegundavuelta.onpe.gob.pe/presentacion-backend/resumen-general/totales?idEleccion=10&tipoFiltro=eleccion"
 }
 
+# --- FUNCIONES DE TELEGRAM ---
+def enviar_telegram(mensaje):
+    token = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    
+    if not token or not chat_id:
+        print("❌ No hay credenciales de Telegram configuradas.")
+        return
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    data = {"chat_id": chat_id, "text": mensaje, "parse_mode": "Markdown"}
+    try:
+        requests.post(url, data=data)
+        print("✅ ¡Mensaje de Telegram enviado con éxito al grupo!")
+    except Exception as e:
+        print(f"❌ Error enviando Telegram: {e}")
+
+def disparar_alerta_completa():
+    print("Esperando 3 segundos para que Google Sheets calcule las proyecciones...")
+    time.sleep(3)
+    
+    # Nos conectamos al Excel usando tu función
+    sheet = conectar_google()
+    historico = sheet.worksheet("Historico")
+    
+    # Obtenemos la última fila ya terminada
+    ultima_fila = len(historico.col_values(1))
+    fila = historico.row_values(ultima_fila)
+
+    if len(fila) < 76:
+        fila += [''] * (76 - len(fila))
+
+    # Extraemos TODO desde la fila
+    partido_1 = fila[1]
+    partido_2 = fila[2]
+    votos_1 = fila[3]      
+    votos_2 = fila[4]
+    pct_1 = fila[5]
+    pct_2 = fila[6]      
+    dif_votos = fila[7]    
+
+    pct_total = fila[9]    
+    pct_peru = fila[10]    
+    pct_ext = fila[11]     
+
+    cont_tot = fila[12]    
+    jee_env_tot = fila[13] 
+    jee_pend_tot = fila[14]
+
+    cont_pe = fila[15]     
+    jee_env_pe = fila[16]  
+    jee_pend_pe = fila[17] 
+
+    cont_ext = fila[18]    
+    jee_env_ext = fila[19] 
+    jee_pend_ext = fila[20]
+
+    proy_fp = fila[73]
+    proy_jp = fila[74]
+    dif_proy = fila[75]
+
+    texto_alerta = (
+        f"🚨 *REPORTE ONPE ACTUALIZADO* 🚨\n\n"
+        f"🥇 *{partido_1}*\n"
+        f"📊 Porcentaje: {pct_1}%\n"
+        f"🗳️ Votos: {votos_1}\n\n"
+        f"🥈 *{partido_2}*\n"
+        f"📊 Porcentaje: {pct_2}%\n"
+        f"🗳️ Votos: {votos_2}\n\n"
+        f"⚖️ *DIFERENCIA ACTUAL:* {dif_votos} votos\n"
+        f"--------------------------------------\n"
+        f"📈 *% ACTAS PROCESADAS*\n"
+        f"🌍 Total: {pct_total}%\n"
+        f"🇵🇪 Perú: {pct_peru}%\n"
+        f"✈️ Extranjero: {pct_ext}%\n"
+        f"--------------------------------------\n"
+        f"📦 *ACTAS - TOTAL*\n"
+        f"✅ Contabilizadas: {cont_tot}\n"
+        f"🏛️ Enviadas JEE: {jee_env_tot}\n"
+        f"⏳ Pendientes JEE: {jee_pend_tot}\n"
+        f"--------------------------------------\n"
+        f"🇵🇪 *ACTAS - PERÚ*\n"
+        f"✅ Contabilizadas: {cont_pe}\n"
+        f"🏛️ Enviadas JEE: {jee_env_pe}\n"
+        f"⏳ Pendientes JEE: {jee_pend_pe}\n"
+        f"--------------------------------------\n"
+        f"✈️ *ACTAS - EXTRANJERO*\n"
+        f"✅ Contabilizadas: {cont_ext}\n"
+        f"🏛️ Enviadas JEE: {jee_env_ext}\n"
+        f"⏳ Pendientes JEE: {jee_pend_ext}\n"
+        f"--------------------------------------\n"
+        f"🔮 *PROYECCIÓN AL 100%*\n"
+        f"🟠 Proy. FP: {proy_fp}\n"
+        f"🟢 Proy. JP: {proy_jp}\n"
+        f"⚖️ *Dif. Proyectada:* {dif_proy}\n"
+    )
+
+    enviar_telegram(texto_alerta)
+# -----------------------------
+
 def conectar_google():
     creds_json = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
     creds = Credentials.from_service_account_info(
@@ -62,7 +162,7 @@ def main():
         c_int(dp[4]), c_int(de[4])   # X: Emitidos Perú, Y: Emitidos Extranjero
     ]
 
-# 3. Subida a Sheets
+    # 3. Subida a Sheets
     try:
         sheet = conectar_google()
         resumen = sheet.worksheet("Resumen")
@@ -80,6 +180,9 @@ def main():
         historico.update(range_name=rango_historico, values=[actas_valores])
         
         print(f"✅ ¡Datos de actas inyectados perfectamente en la Fila {ultima_fila}!")
+        
+        # --- AQUÍ DISPARAMOS LA ALERTA DE TELEGRAM ---
+        disparar_alerta_completa()
         
     except Exception as e:
         print(f"⚠️ Error en Sheets: {e}")
