@@ -26,7 +26,7 @@ def obtener_top3():
     
     # Parámetros más robustos para evitar el error 422
     params = {
-        'url': URL_ONPE,
+        'url': url,
         'apikey': api_key,
         'js_render': 'true',
         'wait': '15000', # Esperamos 15 segundos exactos a que cargue todo el JS
