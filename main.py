@@ -7,6 +7,28 @@ import os
 import json
 import re
 
+
+
+def enviar_telegram(mensaje):
+    token = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    
+    if not token or not chat_id:
+        print("No hay credenciales de Telegram configuradas.")
+        return
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    data = {
+        "chat_id": chat_id,
+        "text": mensaje,
+        "parse_mode": "Markdown"  # Esto permite usar negritas (*) y cursivas (_)
+    }
+    try:
+        requests.post(url, data=data)
+        print("¡Mensaje de Telegram enviado con éxito al grupo!")
+    except Exception as e:
+        print(f"Error enviando Telegram: {e}")
+
 # CONFIGURACIÓN
 url = "https://resultadosegundavuelta.onpe.gob.pe/presentacion-backend/resumen-general/participantes?idEleccion=10&tipoFiltro=eleccion"
 SHEET_NAME = "ONPE SEGUNDA VUELTA"
@@ -106,6 +128,24 @@ def main():
     print(f"Top 1 detectado: {top2[0]['nombre']}")
     guardar(top2)
     print("¡Datos guardados correctamente en Sheets!")
+
+    # --- AQUÍ EMPIEZA EL PASO 3 (ALERTA DE TELEGRAM) ---
+    candidato_1 = top2[0]
+    candidato_2 = top2[1]
+
+    # Usamos abs() para que la diferencia siempre sea positiva
+    diferencia = round(abs(candidato_1['pct'] - candidato_2['pct']), 3)
+
+    texto_alerta = (
+        f"🚨 *REPORTE ONPE ACTUALIZADO* 🚨\n\n"
+        f"1️⃣ *{candidato_1['partido']}*: {candidato_1['pct']}%\n"
+        f"2️⃣ *{candidato_2['partido']}*: {candidato_2['pct']}%\n\n"
+        f"📊 *Diferencia:* {diferencia}%\n"
+        f"🤖 _Excel actualizado correctamente._"
+    )
+
+    # Disparamos el mensaje al grupo
+    enviar_telegram(texto_alerta)
 
 if __name__ == "__main__":
     main()
