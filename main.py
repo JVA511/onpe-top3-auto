@@ -129,19 +129,74 @@ def main():
     guardar(top2)
     print("¡Datos guardados correctamente en Sheets!")
 
-    # --- AQUÍ EMPIEZA EL PASO 3 (ALERTA DE TELEGRAM) ---
+    # --- AQUÍ EMPIEZA EL PASO 3 (ALERTA DE TELEGRAM CON FORMATO COMPLETO) ---
     candidato_1 = top2[0]
     candidato_2 = top2[1]
 
-    # Usamos abs() para que la diferencia siempre sea positiva
-    diferencia = round(abs(candidato_1['pct'] - candidato_2['pct']), 3)
+    # 1. Nos conectamos al Excel para leer TODA la fila 2 de la hoja Resumen
+    sheet = conectar()
+    resumen = sheet.worksheet("Resumen")
+    fila = resumen.row_values(2)
 
+    # 2. Extraemos los valores de las columnas basándonos en sus índices (Col A = 0, B = 1...)
+    # Votos y Diferencia (Columnas D, E, H)
+    votos_1 = fila[3]      
+    votos_2 = fila[4]      
+    dif_votos = fila[7]    
+
+    # % Actas (Columnas J, K, L)
+    pct_total = fila[9]    
+    pct_peru = fila[10]    
+    pct_ext = fila[11]     
+
+    # Actas Totales (Columnas M, N, O)
+    cont_tot = fila[12]    
+    jee_env_tot = fila[13] 
+    jee_pend_tot = fila[14]
+
+    # Actas Perú (Columnas P, Q, R)
+    cont_pe = fila[15]     
+    jee_env_pe = fila[16]  
+    jee_pend_pe = fila[17] 
+
+    # Actas Extranjero (Columnas S, T, U)
+    cont_ext = fila[18]    
+    jee_env_ext = fila[19] 
+    jee_pend_ext = fila[20]
+
+    # 3. Armamos el mensaje con formato, negritas (*) y emojis
     texto_alerta = (
         f"🚨 *REPORTE ONPE ACTUALIZADO* 🚨\n\n"
-        f"1️⃣ *{candidato_1['partido']}*: {candidato_1['pct']}%\n"
-        f"2️⃣ *{candidato_2['partido']}*: {candidato_2['pct']}%\n\n"
-        f"📊 *Diferencia:* {diferencia}%\n"
-        f"🤖 _Excel actualizado correctamente._"
+        
+        f"🥇 *{candidato_1['partido']}*\n"
+        f"📊 Porcentaje: {candidato_1['pct']}%\n"
+        f"🗳️ Votos: {votos_1}\n\n"
+        
+        f"🥈 *{candidato_2['partido']}*\n"
+        f"📊 Porcentaje: {candidato_2['pct']}%\n"
+        f"🗳️ Votos: {votos_2}\n\n"
+        
+        f"⚖️ *DIFERENCIA:* {dif_votos} votos\n"
+        f"--------------------------------------\n"
+        f"📈 *% ACTAS PROCESADAS*\n"
+        f"🌍 Total: {pct_total}%\n"
+        f"🇵🇪 Perú: {pct_peru}%\n"
+        f"✈️ Extranjero: {pct_ext}%\n"
+        f"--------------------------------------\n"
+        f"📦 *ESTADO DE ACTAS - TOTAL*\n"
+        f"✅ Contabilizadas: {cont_tot}\n"
+        f"🏛️ Enviadas JEE: {jee_env_tot}\n"
+        f"⏳ Pendientes JEE: {jee_pend_tot}\n"
+        f"--------------------------------------\n"
+        f"🇵🇪 *ESTADO DE ACTAS - PERÚ*\n"
+        f"✅ Contabilizadas: {cont_pe}\n"
+        f"🏛️ Enviadas JEE: {jee_env_pe}\n"
+        f"⏳ Pendientes JEE: {jee_pend_pe}\n"
+        f"--------------------------------------\n"
+        f"✈️ *ESTADO DE ACTAS - EXTRANJERO*\n"
+        f"✅ Contabilizadas: {cont_ext}\n"
+        f"🏛️ Enviadas JEE: {jee_env_ext}\n"
+        f"⏳ Pendientes JEE: {jee_pend_ext}\n"
     )
 
     # Disparamos el mensaje al grupo
