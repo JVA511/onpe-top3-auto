@@ -118,28 +118,35 @@ def disparar_alerta_completa():
     pct_proy_jp = fmt_pct(fila[80]) if fila[80] != '' else "..."
     dif_real_pct = fmt_pct(fila[81]) if fila[81] != '' else "..."
 
-    # --- 3. CEREBRO DE LA IA (MODO DETECTIVE) ---
+    # --- 3. CEREBRO DE LA IA (GEMINI) ---
     def generar_comentario_ia(p1, pc1, p2, pc2, dif):
         try:
             api_key = os.environ.get("GEMINI_API_KEY")
             if not api_key:
-                return "🤖 *Comentario IA:* (Aviso: Falta agregar la llave)"
+                return "🤖 *Comentario IA:* (Aviso: Falta agregar la llave GEMINI_API_KEY en GitHub Secrets)"
             
             genai.configure(api_key=api_key)
             
-            # Le pedimos a Google su lista secreta de modelos
-            modelos_validos = []
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    # Limpiamos el prefijo 'models/' para que sea fácil de copiar
-                    nombre_limpio = m.name.replace('models/', '')
-                    modelos_validos.append(nombre_limpio)
+            prompt = f"""
+            Eres un analista político y financiero peruano muy sarcástico y dramático. Estás dando un reporte en un grupo de Telegram de traders llamado 'TRADEOS'.
+            Acaban de salir los nuevos resultados de la ONPE:
+            - Primer lugar: {p1} con {pc1}
+            - Segundo lugar: {p2} con {pc2}
+            - Diferencia: {dif} votos.
+
+            Genera un comentario corto (máximo 2 líneas) para cerrar el reporte. Reglas estrictas:
+            - Usa jerga peruana y términos financieros.
+            - Si Juntos por el Perú va ganando por más de 80,000 votos, muestra pánico absoluto, menciona que la Bolsa de Valores se desploma y usa la frase exacta: "Oficialmente estamos cagados. Vayan sacando pasaporte."
+            - Si Juntos por el Perú va ganando pero por menos de 80,000 votos, di la frase: "Aún hay esperanza, la brecha es cortita. ¡Pongan a rezar a sus abuelas!"
+            - Si Fuerza Popular va ganando, muestra alivio, menciona que salvamos a Julio Velarde, que la Bolsa de Valores sube y termina con la frase exacta: "Lo celebra Fujimori desde la tumba."
+            - Sé creativo, chistoso y no uses hashtags.
+            """
             
-            lista_str = ", ".join(modelos_validos)
-            return f"🤖 *NOMBRES REALES ACEPTADOS POR LA API:*\n{lista_str}"
-            
+            modelo = genai.GenerativeModel('gemini-pro-latest')
+            respuesta = modelo.generate_content(prompt)
+            return f"🤖 *Comentario IA:*\n{respuesta.text.strip()}"
         except Exception as e:
-            return f"🤖 *Comentario IA:* (Error: {e})"
+            return f"🤖 *Comentario IA:* (La IA tuvo un lapsus financiero: {e})"
 
     comentario_final = generar_comentario_ia(partido_1, pct_1, partido_2, pct_2, dif_votos)
 
