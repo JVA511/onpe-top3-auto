@@ -24,7 +24,7 @@ def enviar_telegram(mensaje):
         return
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    data = {"chat_id": chat_id, "text": mensaje, "parse_mode": "Markdown"}
+    data = {"chat_id": chat_id, "text": mensaje, "parse_mode": "HTML"}
     try:
         requests.post(url, data=data)
         print("✅ ¡Mensaje de Telegram enviado con éxito al grupo!")
@@ -150,43 +150,43 @@ def disparar_alerta_completa():
 
     comentario_final = generar_comentario_ia(partido_1, pct_1, partido_2, pct_2, dif_votos)
 
-    # --- ARMAMOS EL MENSAJE FINAL ---
+# --- ARMAMOS EL MENSAJE FINAL (VERSIÓN HTML A PRUEBA DE BALAS) ---
     texto_alerta = (
-        f"🚨 *REPORTE ONPE ACTUALIZADO* 🚨\n\n"
-        f"🥇 *{partido_1}*\n"
+        f"🚨 <b>REPORTE ONPE ACTUALIZADO</b> 🚨\n\n"
+        f"🥇 <b>{partido_1}</b>\n"
         f"📊 Porcentaje: {pct_1}\n"
         f"🗳️ Votos: {votos_1}\n\n"
-        f"🥈 *{partido_2}*\n"
+        f"🥈 <b>{partido_2}</b>\n"
         f"📊 Porcentaje: {pct_2}\n"
         f"🗳️ Votos: {votos_2}\n\n"
-        f"⚖️ *DIF. ACTUAL:* {dif_votos} votos ({dif_pct})\n"
+        f"⚖️ <b>DIF. ACTUAL:</b> {dif_votos} votos ({dif_pct})\n"
         f"--------------------------------------\n"
-        f"📈 *% ACTAS PROCESADAS*\n"
+        f"📈 <b>% ACTAS PROCESADAS</b>\n"
         f"🌍 Total: {pct_total}\n"
         f"🇵🇪 Perú: {pct_peru}\n"
         f"✈️ Extranjero: {pct_ext}\n"
         f"--------------------------------------\n"
-        f"📦 *ACTAS - TOTAL*\n"
+        f"📦 <b>ACTAS - TOTAL</b>\n"
         f"✅ Contabilizadas: {cont_tot}\n"
         f"🏛️ Enviadas JEE: {jee_env_tot}\n"
         f"⏳ Pendientes JEE: {jee_pend_tot}\n"
         f"--------------------------------------\n"
-        f"🇵🇪 *ACTAS - PERÚ*\n"
+        f"🇵🇪 <b>ACTAS - PERÚ</b>\n"
         f"✅ Contabilizadas: {cont_pe}\n"
         f"🏛️ Enviadas JEE: {jee_env_pe}\n"
         f"⏳ Pendientes JEE: {jee_pend_pe}\n"
         f"--------------------------------------\n"
-        f"✈️ *ACTAS - EXTRANJERO*\n"
+        f"✈️ <b>ACTAS - EXTRANJERO</b>\n"
         f"✅ Contabilizadas: {cont_ext}\n"
         f"🏛️ Enviadas JEE: {jee_env_ext}\n"
         f"⏳ Pendientes JEE: {jee_pend_ext}\n"
         f"--------------------------------------\n"
-        f"🎯 *PROYECCIÓN MATEMÁTICA AL 100%*\n"
+        f"🎯 <b>PROYECCIÓN MATEMÁTICA AL 100%</b>\n"
         f"🟠 Proy. FP: {proy_real_fp} votos ({pct_proy_fp})\n"
         f"🟢 Proy. JP: {proy_real_jp} votos ({pct_proy_jp})\n"
-        f"⚖️ *Dif. Proyectada:* {dif_real_votos} votos ({dif_real_pct})\n"
+        f"⚖️ <b>Dif. Proyectada:</b> {dif_real_votos} votos ({dif_real_pct})\n"
         f"--------------------------------------\n"
-        f"{comentario_final}\n"
+        f"{comentario_final.replace('*', '<b>').replace('IA:*', 'IA:</b>')}\n"
     )
 
     enviar_telegram(texto_alerta)
