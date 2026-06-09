@@ -18,7 +18,7 @@ jobs:
 
       - name: Instalar dependencias
         run: |
-          pip install requests gspread google-auth playwright beautifulsoup4 lxml
+          pip install -r requirements.txt
           playwright install chromium
 
       - name: 1. Descargar Top 3 (main.py)
