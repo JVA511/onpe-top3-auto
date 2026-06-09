@@ -4,7 +4,6 @@ from google.oauth2.service_account import Credentials
 import json
 import time
 import os
-import google.generativeai as genai
 
 SHEET_NAME = "ONPE SEGUNDA VUELTA"
 
@@ -24,10 +23,14 @@ def enviar_telegram(mensaje):
         return
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    # Formato HTML estricto para evitar bloqueos de Telegram
     data = {"chat_id": chat_id, "text": mensaje, "parse_mode": "HTML"}
     try:
-        requests.post(url, data=data)
-        print("✅ ¡Mensaje de Telegram enviado con éxito al grupo!")
+        respuesta = requests.post(url, data=data)
+        if respuesta.status_code == 200:
+            print("✅ ¡Mensaje de Telegram enviado con éxito al grupo!")
+        else:
+            print(f"❌ TELEGRAM RECHAZÓ EL MENSAJE: {respuesta.text}")
     except Exception as e:
         print(f"❌ Error enviando Telegram: {e}")
 
@@ -35,11 +38,9 @@ def disparar_alerta_completa():
     print("Esperando 3 segundos para que Google Sheets calcule las proyecciones...")
     time.sleep(3)
     
-    # Nos conectamos al Excel usando tu función
     sheet = conectar_google()
     historico = sheet.worksheet("Historico")
     
-    # Obtenemos la última fila ya terminada
     ultima_fila = len(historico.col_values(1))
     fila = historico.row_values(ultima_fila)
 
@@ -51,17 +52,12 @@ def disparar_alerta_completa():
         if not numero or str(numero) == "Calculando...": return numero
         try:
             val_str = str(numero).strip()
-            
-            # 1. Si trae decimales de ceros al final, los volamos sin piedad
             if val_str.endswith(".00"): val_str = val_str[:-3]
             if val_str.endswith(",00"): val_str = val_str[:-3]
             if val_str.endswith(".0"): val_str = val_str[:-2]
             if val_str.endswith(",0"): val_str = val_str[:-2]
             
-            # 2. Ahora sí, limpiamos cualquier punto o coma de miles que quede
             val_str = val_str.replace(".", "").replace(",", "")
-            
-            # 3. Lo convertimos a entero real y formateamos con puntos
             return f"{int(val_str):,}".replace(",", ".")
         except:
             return str(numero)
@@ -70,22 +66,18 @@ def disparar_alerta_completa():
     def fmt_pct(valor):
         if not valor or str(valor) in ["...", "Calculando..."]: return str(valor)
         try:
-            # Limpiamos el % y cambiamos coma por punto para la matemática
             v_limpio = str(valor).replace('%', '').replace(',', '.').strip()
-            # Redondeamos a máximo 3 decimales
             num = round(float(v_limpio), 3)
-            # Devolvemos con coma y su %
             return str(num).replace('.', ',') + "%"
         except:
             return str(valor) + "%" if "%" not in str(valor) else str(valor)
 
-    # Extraemos Datos Base (Aplicando el formato)
+    # Extraemos Datos Base
     partido_1 = fila[1]
     partido_2 = fila[2]
     votos_1 = fmt_num(fila[3])      
     votos_2 = fmt_num(fila[4])
     
-    # Porcentajes Principales
     pct_1 = fmt_pct(fila[5])
     pct_2 = fmt_pct(fila[6])      
     dif_votos = fmt_num(fila[7])
@@ -95,7 +87,6 @@ def disparar_alerta_completa():
     pct_peru = fmt_pct(fila[10])    
     pct_ext = fmt_pct(fila[11])     
 
-    # Actas con separador de miles
     cont_tot = fmt_num(fila[12])    
     jee_env_tot = fmt_num(fila[13]) 
     jee_pend_tot = fmt_num(fila[14])
@@ -108,49 +99,33 @@ def disparar_alerta_completa():
     jee_env_ext = fmt_num(fila[19]) 
     jee_pend_ext = fmt_num(fila[20])
 
-    # Proyecciones Reales al 100% (Votos)
     proy_real_fp = fmt_num(fila[76]) if fila[76] != '' else "Calculando..."
     proy_real_jp = fmt_num(fila[77]) if fila[77] != '' else "Calculando..."
     dif_real_votos = fmt_num(fila[78]) if fila[78] != '' else "Calculando..."
 
-    # Porcentajes de Proyección
     pct_proy_fp = fmt_pct(fila[79]) if fila[79] != '' else "..."
     pct_proy_jp = fmt_pct(fila[80]) if fila[80] != '' else "..."
     dif_real_pct = fmt_pct(fila[81]) if fila[81] != '' else "..."
 
-    # --- 3. CEREBRO DE LA IA (GEMINI) ---
-    def generar_comentario_ia(p1, pc1, p2, pc2, dif):
+    # --- 3. REGLAS PREDETERMINADAS (CEREBRO ESTÁTICO) ---
+    def generar_comentario_estatico(partido_ganador, dif_texto):
         try:
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if not api_key:
-                return "🤖 *Comentario IA:* (Aviso: Falta agregar la llave GEMINI_API_KEY en GitHub Secrets)"
+            diferencia_num = int(str(dif_texto).replace('.', '').replace(',', ''))
             
-            genai.configure(api_key=api_key)
-            
-            prompt = f"""
-            Eres un analista político y financiero peruano muy sarcástico y dramático. Estás dando un reporte en un grupo de Telegram de traders llamado 'TRADEOS'.
-            Acaban de salir los nuevos resultados de la ONPE:
-            - Primer lugar: {p1} con {pc1}
-            - Segundo lugar: {p2} con {pc2}
-            - Diferencia: {dif} votos.
+            if "JUNTOS" in partido_ganador.upper() or "JP" in partido_ganador.upper():
+                if diferencia_num > 80000:
+                    return "🤖 <b>Comentario:</b> Oficialmente estamos cagados. Vayan sacando pasaporte."
+                else:
+                    return "🤖 <b>Comentario:</b> Aún hay esperanza, la brecha es cortita. ¡Pongan a rezar a sus abuelas!"
+            else:
+                return "🤖 <b>Comentario:</b> Lo celebra Fujimori desde la tumba."
+                
+        except Exception:
+            return "🤖 <b>Comentario:</b> Qué nervios esta diferencia."
 
-            Genera un comentario corto (máximo 2 líneas) para cerrar el reporte. Reglas estrictas:
-            - Usa jerga peruana y términos financieros.
-            - Si Juntos por el Perú va ganando por más de 80,000 votos, muestra pánico absoluto, menciona que la Bolsa de Valores se desploma y usa la frase exacta: "Oficialmente estamos cagados. Vayan sacando pasaporte."
-            - Si Juntos por el Perú va ganando pero por menos de 80,000 votos, di la frase: "Aún hay esperanza, la brecha es cortita. ¡Pongan a rezar a sus abuelas!"
-            - Si Fuerza Popular va ganando, muestra alivio, menciona que salvamos a Julio Velarde, que la Bolsa de Valores sube y termina con la frase exacta: "Lo celebra Fujimori desde la tumba."
-            - Sé creativo, chistoso y no uses hashtags.
-            """
-            
-            modelo = genai.GenerativeModel('gemini-3.5-flash')
-            respuesta = modelo.generate_content(prompt)
-            return f"🤖 *Comentario IA:*\n{respuesta.text.strip()}"
-        except Exception as e:
-            return f"🤖 *Comentario IA:* (La IA tuvo un lapsus financiero: {e})"
+    comentario_final = generar_comentario_estatico(partido_1, dif_votos)
 
-    comentario_final = generar_comentario_ia(partido_1, pct_1, partido_2, pct_2, dif_votos)
-
-# --- ARMAMOS EL MENSAJE FINAL (VERSIÓN HTML A PRUEBA DE BALAS) ---
+    # --- ARMAMOS EL MENSAJE FINAL (HTML) ---
     texto_alerta = (
         f"🚨 <b>REPORTE ONPE ACTUALIZADO</b> 🚨\n\n"
         f"🥇 <b>{partido_1}</b>\n"
@@ -186,7 +161,7 @@ def disparar_alerta_completa():
         f"🟢 Proy. JP: {proy_real_jp} votos ({pct_proy_jp})\n"
         f"⚖️ <b>Dif. Proyectada:</b> {dif_real_votos} votos ({dif_real_pct})\n"
         f"--------------------------------------\n"
-        f"{comentario_final.replace('*', '<b>').replace('IA:*', 'IA:</b>')}\n"
+        f"{comentario_final}\n"
     )
 
     enviar_telegram(texto_alerta)
@@ -231,36 +206,30 @@ def main():
     de = datos_extraidos["extranjero"]
     dt = datos_extraidos["todos"]
 
-    # Ordenamos los 16 valores (Actas + Votos Totales y Segmentados)
     actas_valores = [
         c_float(dt[0]), c_float(dp[0]), c_float(de[0]), 
         c_int(dt[1]), c_int(dt[2]), c_int(dt[3]),       
         c_int(dp[1]), c_int(dp[2]), c_int(dp[3]),       
         c_int(de[1]), c_int(de[2]), c_int(de[3]),
-        c_int(dt[4]), c_int(dt[5]),  # V: Emitidos Total, W: Válidos Total
-        c_int(dp[4]), c_int(de[4])   # X: Emitidos Perú, Y: Emitidos Extranjero
+        c_int(dt[4]), c_int(dt[5]),  
+        c_int(dp[4]), c_int(de[4])   
     ]
 
-    # 3. Subida a Sheets
     try:
         sheet = conectar_google()
         resumen = sheet.worksheet("Resumen")
         historico = sheet.worksheet("Historico")
         
-        # Actualizamos el resumen (Fijo en J2:Y2)
         resumen.update(range_name="J2:Y2", values=[actas_valores])
         
-        # --- EL TRUCO DEL FRANCOTIRADOR ---
         col_a = historico.col_values(1)
         ultima_fila = len(col_a) 
         
-        # Inyectamos de la J a la Y en esa fila exacta
         rango_historico = f"J{ultima_fila}:Y{ultima_fila}"
         historico.update(range_name=rango_historico, values=[actas_valores])
         
         print(f"✅ ¡Datos de actas inyectados perfectamente en la Fila {ultima_fila}!")
         
-        # --- AQUÍ DISPARAMOS LA ALERTA DE TELEGRAM ---
         disparar_alerta_completa()
         
     except Exception as e:
