@@ -6,7 +6,6 @@ on:
   workflow_dispatch: # <--- Esto permite que lo activemos desde afuera
 
 jobs:
-# ... (el resto de tu código queda igual)
   actualizar:
     runs-on: ubuntu-latest
     steps:
@@ -35,4 +34,5 @@ jobs:
           ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python actas.py
