@@ -1,9 +1,7 @@
 name: Alerta ONPE
 
 on:
-  schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch: # <--- Esto permite que lo activemos desde afuera
+  workflow_dispatch:
 
 jobs:
   actualizar:
