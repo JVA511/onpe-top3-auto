@@ -118,6 +118,39 @@ def disparar_alerta_completa():
     pct_proy_jp = fmt_pct(fila[80]) if fila[80] != '' else "..."
     dif_real_pct = fmt_pct(fila[81]) if fila[81] != '' else "..."
 
+    # --- 3. CEREBRO DE LA IA (GEMINI) ---
+    def generar_comentario_ia(p1, pc1, p2, pc2, dif):
+        try:
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                return "🤖 *Comentario IA:* (Aviso: Falta agregar la llave GEMINI_API_KEY en GitHub Secrets)"
+            
+            genai.configure(api_key=api_key)
+            
+            prompt = f"""
+            Eres un analista político y financiero peruano muy sarcástico y dramático. Estás dando un reporte en un grupo de Telegram de traders llamado 'TRADEOS'.
+            Acaban de salir los nuevos resultados de la ONPE:
+            - Primer lugar: {p1} con {pc1}
+            - Segundo lugar: {p2} con {pc2}
+            - Diferencia: {dif} votos.
+
+            Genera un comentario corto (máximo 2 líneas) para cerrar el reporte. Reglas estrictas:
+            - Usa jerga peruana y términos financieros.
+            - Si Juntos por el Perú va ganando por más de 80,000 votos, muestra pánico absoluto, menciona que la Bolsa de Valores se desploma y usa la frase exacta: "Oficialmente estamos cagados. Vayan sacando pasaporte."
+            - Si Juntos por el Perú va ganando pero por menos de 80,000 votos, di la frase: "Aún hay esperanza, la brecha es cortita. ¡Pongan a rezar a sus abuelas!"
+            - Si Fuerza Popular va ganando, muestra alivio, menciona que salvamos a Julio Velarde, que la Bolsa de Valores sube y termina con la frase exacta: "Lo celebra Fujimori desde la tumba."
+            - Sé creativo, chistoso y no uses hashtags.
+            """
+            
+            modelo = genai.GenerativeModel('gemini-1.5-flash')
+            respuesta = modelo.generate_content(prompt)
+            return f"🤖 *Comentario IA:*\n{respuesta.text.strip()}"
+        except Exception as e:
+            return f"🤖 *Comentario IA:* (La IA tuvo un lapsus financiero: {e})"
+
+    comentario_final = generar_comentario_ia(partido_1, pct_1, partido_2, pct_2, dif_votos)
+
+    # --- ARMAMOS EL MENSAJE FINAL ---
     texto_alerta = (
         f"🚨 *REPORTE ONPE ACTUALIZADO* 🚨\n\n"
         f"🥇 *{partido_1}*\n"
@@ -152,6 +185,8 @@ def disparar_alerta_completa():
         f"🟠 Proy. FP: {proy_real_fp} votos ({pct_proy_fp})\n"
         f"🟢 Proy. JP: {proy_real_jp} votos ({pct_proy_jp})\n"
         f"⚖️ *Dif. Proyectada:* {dif_real_votos} votos ({dif_real_pct})\n"
+        f"--------------------------------------\n"
+        f"{comentario_final}\n"
     )
 
     enviar_telegram(texto_alerta)
