@@ -42,52 +42,86 @@ def disparar_alerta_completa():
     ultima_fila = len(historico.col_values(1))
     fila = historico.row_values(ultima_fila)
 
-    if len(fila) < 76:
-        fila += [''] * (76 - len(fila))
+    if len(fila) < 82:
+        fila += [''] * (82 - len(fila))
 
-    # Extraemos TODO desde la fila
+    # --- 1. FUNCIÓN PARA FORMATEAR CON PUNTOS DE MILES ---
+    def fmt_num(numero):
+        if not numero or numero == "Calculando...": return numero
+        try:
+            # Limpiamos si viene con formato previo (,00) y lo volvemos entero
+            num_limpio = int(float(str(numero).replace(".", "").replace(",", "")))
+            # Le ponemos puntos de miles
+            return f"{num_limpio:,}".replace(",", ".")
+        except:
+            return str(numero)
+
+    # --- 2. FUNCIÓN PARA PORCENTAJES (MÁX 3 DECIMALES) ---
+    def fmt_pct(valor):
+        if not valor or str(valor) in ["...", "Calculando..."]: return str(valor)
+        try:
+            # Limpiamos el % y cambiamos coma por punto para la matemática
+            v_limpio = str(valor).replace('%', '').replace(',', '.').strip()
+            # Redondeamos a máximo 3 decimales
+            num = round(float(v_limpio), 3)
+            # Devolvemos con coma y su %
+            return str(num).replace('.', ',') + "%"
+        except:
+            return str(valor) + "%" if "%" not in str(valor) else str(valor)
+
+    # Extraemos Datos Base (Aplicando el formato)
     partido_1 = fila[1]
     partido_2 = fila[2]
-    votos_1 = fila[3]      
-    votos_2 = fila[4]
-    pct_1 = fila[5]
-    pct_2 = fila[6]      
-    dif_votos = fila[7]    
+    votos_1 = fmt_num(fila[3])      
+    votos_2 = fmt_num(fila[4])
+    
+    # Porcentajes Principales
+    pct_1 = fmt_pct(fila[5])
+    pct_2 = fmt_pct(fila[6])      
+    dif_votos = fmt_num(fila[7])
+    dif_pct = fmt_pct(fila[8])
 
-    pct_total = fila[9]    
-    pct_peru = fila[10]    
-    pct_ext = fila[11]     
+    pct_total = fmt_pct(fila[9])    
+    pct_peru = fmt_pct(fila[10])    
+    pct_ext = fmt_pct(fila[11])     
 
-    cont_tot = fila[12]    
-    jee_env_tot = fila[13] 
-    jee_pend_tot = fila[14]
+    # Actas con separador de miles
+    cont_tot = fmt_num(fila[12])    
+    jee_env_tot = fmt_num(fila[13]) 
+    jee_pend_tot = fmt_num(fila[14])
 
-    cont_pe = fila[15]     
-    jee_env_pe = fila[16]  
-    jee_pend_pe = fila[17] 
+    cont_pe = fmt_num(fila[15])     
+    jee_env_pe = fmt_num(fila[16])  
+    jee_pend_pe = fmt_num(fila[17]) 
 
-    cont_ext = fila[18]    
-    jee_env_ext = fila[19] 
-    jee_pend_ext = fila[20]
+    cont_ext = fmt_num(fila[18])    
+    jee_env_ext = fmt_num(fila[19]) 
+    jee_pend_ext = fmt_num(fila[20])
 
-    proy_fp = fila[73]
-    proy_jp = fila[74]
-    dif_proy = fila[75]
+    # Proyecciones Reales al 100% (Votos)
+    proy_real_fp = fmt_num(fila[76]) if fila[76] != '' else "Calculando..."
+    proy_real_jp = fmt_num(fila[77]) if fila[77] != '' else "Calculando..."
+    dif_real_votos = fmt_num(fila[78]) if fila[78] != '' else "Calculando..."
+
+    # Porcentajes de Proyección
+    pct_proy_fp = fmt_pct(fila[79]) if fila[79] != '' else "..."
+    pct_proy_jp = fmt_pct(fila[80]) if fila[80] != '' else "..."
+    dif_real_pct = fmt_pct(fila[81]) if fila[81] != '' else "..."
 
     texto_alerta = (
         f"🚨 *REPORTE ONPE ACTUALIZADO* 🚨\n\n"
         f"🥇 *{partido_1}*\n"
-        f"📊 Porcentaje: {pct_1}%\n"
+        f"📊 Porcentaje: {pct_1}\n"
         f"🗳️ Votos: {votos_1}\n\n"
         f"🥈 *{partido_2}*\n"
-        f"📊 Porcentaje: {pct_2}%\n"
+        f"📊 Porcentaje: {pct_2}\n"
         f"🗳️ Votos: {votos_2}\n\n"
-        f"⚖️ *DIFERENCIA ACTUAL:* {dif_votos} votos\n"
+        f"⚖️ *DIF. ACTUAL:* {dif_votos} votos ({dif_pct})\n"
         f"--------------------------------------\n"
         f"📈 *% ACTAS PROCESADAS*\n"
-        f"🌍 Total: {pct_total}%\n"
-        f"🇵🇪 Perú: {pct_peru}%\n"
-        f"✈️ Extranjero: {pct_ext}%\n"
+        f"🌍 Total: {pct_total}\n"
+        f"🇵🇪 Perú: {pct_peru}\n"
+        f"✈️ Extranjero: {pct_ext}\n"
         f"--------------------------------------\n"
         f"📦 *ACTAS - TOTAL*\n"
         f"✅ Contabilizadas: {cont_tot}\n"
@@ -104,10 +138,10 @@ def disparar_alerta_completa():
         f"🏛️ Enviadas JEE: {jee_env_ext}\n"
         f"⏳ Pendientes JEE: {jee_pend_ext}\n"
         f"--------------------------------------\n"
-        f"🔮 *PROYECCIÓN AL 100%*\n"
-        f"🟠 Proy. FP: {proy_fp}\n"
-        f"🟢 Proy. JP: {proy_jp}\n"
-        f"⚖️ *Dif. Proyectada:* {dif_proy}\n"
+        f"🎯 *PROYECCIÓN MATEMÁTICA AL 100%*\n"
+        f"🟠 Proy. FP: {proy_real_fp} votos ({pct_proy_fp})\n"
+        f"🟢 Proy. JP: {proy_real_jp} votos ({pct_proy_jp})\n"
+        f"⚖️ *Dif. Proyectada:* {dif_real_votos} votos ({dif_real_pct})\n"
     )
 
     enviar_telegram(texto_alerta)
