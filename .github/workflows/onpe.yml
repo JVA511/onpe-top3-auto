@@ -1,11 +1,12 @@
-name: Actualizador ONPE Doble
+name: Alerta ONPE
 
 on:
   schedule:
     - cron: '0 * * * *'
-  workflow_dispatch:
+  workflow_dispatch: # <--- Esto permite que lo activemos desde afuera
 
 jobs:
+# ... (el resto de tu código queda igual)
   actualizar:
     runs-on: ubuntu-latest
     steps:
