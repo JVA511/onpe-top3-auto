@@ -142,7 +142,7 @@ def disparar_alerta_completa():
             - Sé creativo, chistoso y no uses hashtags.
             """
             
-            modelo = genai.GenerativeModel('gemini-pro-latest')
+            modelo = genai.GenerativeModel('gemini-3.5-flash')
             respuesta = modelo.generate_content(prompt)
             return f"🤖 *Comentario IA:*\n{respuesta.text.strip()}"
         except Exception as e:
