@@ -4,6 +4,7 @@ from google.oauth2.service_account import Credentials
 import json
 import time
 import os
+import google.generativeai as genai
 
 SHEET_NAME = "ONPE SEGUNDA VUELTA"
 
