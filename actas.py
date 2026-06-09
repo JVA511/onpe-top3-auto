@@ -43,9 +43,16 @@ def disparar_alerta_completa():
     
     ultima_fila = len(historico.col_values(1))
     fila = historico.row_values(ultima_fila)
-
-    if len(fila) < 82:
-        fila += [''] * (82 - len(fila))
+    
+    # --- EL LECTOR DEL PASADO (NUEVO) ---
+    # Si tenemos más de 2 filas (la 1 es cabecera), leemos la anterior para comparar
+    if ultima_fila > 2:
+        fila_ant = historico.row_values(ultima_fila - 1)
+    else:
+        fila_ant = fila # Si no hay datos, fingimos que son iguales
+        
+    if len(fila) < 82: fila += [''] * (82 - len(fila))
+    if len(fila_ant) < 82: fila_ant += [''] * (82 - len(fila_ant))
 
     # --- 1. FUNCIÓN A PRUEBA DE BALAS PARA MILES ---
     def fmt_num(numero):
@@ -72,7 +79,7 @@ def disparar_alerta_completa():
         except:
             return str(valor) + "%" if "%" not in str(valor) else str(valor)
 
-    # Extraemos Datos Base
+    # Extraemos Datos Base (Actuales)
     partido_1 = fila[1]
     partido_2 = fila[2]
     votos_1 = fmt_num(fila[3])      
@@ -107,23 +114,40 @@ def disparar_alerta_completa():
     pct_proy_jp = fmt_pct(fila[80]) if fila[80] != '' else "..."
     dif_real_pct = fmt_pct(fila[81]) if fila[81] != '' else "..."
 
-    # --- 3. REGLAS PREDETERMINADAS (CEREBRO ESTÁTICO) ---
-    def generar_comentario_estatico(partido_ganador, dif_texto):
+    # Extraemos Datos Base (Del Pasado)
+    partido_1_ant = fila_ant[1]
+    dif_votos_ant = fmt_num(fila_ant[7])
+
+    # --- 3. REGLAS PREDETERMINADAS (CEREBRO ESTÁTICO V2) ---
+    def generar_comentario_estatico(ganador_hoy, dif_hoy_txt, ganador_ayer, dif_ayer_txt):
         try:
-            diferencia_num = int(str(dif_texto).replace('.', '').replace(',', ''))
+            # Convertimos las diferencias a números enteros limpios para comparar
+            dif_hoy = int(str(dif_hoy_txt).replace('.', '').replace(',', ''))
+            try:
+                dif_ayer = int(str(dif_ayer_txt).replace('.', '').replace(',', ''))
+            except:
+                dif_ayer = dif_hoy
             
-            if "JUNTOS" in partido_ganador.upper() or "JP" in partido_ganador.upper():
-                if diferencia_num > 80000:
-                    return "🤖 <b>Comentario:</b> Oficialmente estamos cagados. Vayan sacando pasaporte."
+            es_jp_hoy = "JUNTOS" in ganador_hoy.upper() or "JP" in ganador_hoy.upper()
+            es_jp_ayer = "JUNTOS" in ganador_ayer.upper() or "JP" in ganador_ayer.upper()
+            
+            if es_jp_hoy:
+                if dif_hoy > 10000:
+                    if es_jp_ayer and dif_hoy > dif_ayer:
+                        return f"🤖 <b>Comentario:</b> La diferencia subió a {dif_hoy_txt} votos y sigue ganando JP ptm. Oficialmente seguimos recontra cagados. Vayan sacando pasaporte."
+                    elif es_jp_ayer and dif_hoy < dif_ayer:
+                        return f"🤖 <b>Comentario:</b> JP sigue primero pero la diferencia bajó a {dif_hoy_txt}. Estamos cagados, pero con un micro-respiro."
+                    else:
+                        return f"🤖 <b>Comentario:</b> Oficialmente estamos cagados. JP dio la vuelta y ya sacó más de 10k de diferencia. Vayan sacando pasaporte."
                 else:
-                    return "🤖 <b>Comentario:</b> Aún hay esperanza, la brecha es cortita. ¡Pongan a rezar a sus abuelas!"
+                    return f"🤖 <b>Comentario:</b> Aún hay esperanza, la brecha es de solo {dif_hoy_txt} votos. ¡Pongan a rezar a sus abuelas!"
             else:
                 return "🤖 <b>Comentario:</b> Lo celebra Fujimori desde la tumba."
                 
-        except Exception:
+        except Exception as e:
             return "🤖 <b>Comentario:</b> Qué nervios esta diferencia."
 
-    comentario_final = generar_comentario_estatico(partido_1, dif_votos)
+    comentario_final = generar_comentario_estatico(partido_1, dif_votos, partido_1_ant, dif_votos_ant)
 
     # --- ARMAMOS EL MENSAJE FINAL (HTML) ---
     texto_alerta = (
