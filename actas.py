@@ -45,14 +45,23 @@ def disparar_alerta_completa():
     if len(fila) < 82:
         fila += [''] * (82 - len(fila))
 
-    # --- 1. FUNCIÓN PARA FORMATEAR CON PUNTOS DE MILES ---
+    # --- 1. FUNCIÓN A PRUEBA DE BALAS PARA MILES ---
     def fmt_num(numero):
-        if not numero or numero == "Calculando...": return numero
+        if not numero or str(numero) == "Calculando...": return numero
         try:
-            # Limpiamos si viene con formato previo (,00) y lo volvemos entero
-            num_limpio = int(float(str(numero).replace(".", "").replace(",", "")))
-            # Le ponemos puntos de miles
-            return f"{num_limpio:,}".replace(",", ".")
+            val_str = str(numero).strip()
+            
+            # 1. Si trae decimales de ceros al final, los volamos sin piedad
+            if val_str.endswith(".00"): val_str = val_str[:-3]
+            if val_str.endswith(",00"): val_str = val_str[:-3]
+            if val_str.endswith(".0"): val_str = val_str[:-2]
+            if val_str.endswith(",0"): val_str = val_str[:-2]
+            
+            # 2. Ahora sí, limpiamos cualquier punto o coma de miles que quede
+            val_str = val_str.replace(".", "").replace(",", "")
+            
+            # 3. Lo convertimos a entero real y formateamos con puntos
+            return f"{int(val_str):,}".replace(",", ".")
         except:
             return str(numero)
 
