@@ -35,6 +35,9 @@ def enviar_telegram(mensaje):
         print(f"❌ Error enviando Telegram: {e}")
 
 def disparar_alerta_completa():
+    print("Esperando 3 segundos para asegurar la lectura...")
+    time.sleep(3)
+    
     sheet = conectar_google()
     historico = sheet.worksheet("Historico")
     
@@ -101,6 +104,14 @@ def disparar_alerta_completa():
     cont_ext = fmt_num(fila[18])    
     jee_env_ext = fmt_num(fila[19]) 
     jee_pend_ext = fmt_num(fila[20])
+
+    proy_real_fp = fmt_num(fila[76]) if fila[76] != '' else "Calculando..."
+    proy_real_jp = fmt_num(fila[77]) if fila[77] != '' else "Calculando..."
+    dif_real_votos = fmt_num(fila[78]) if fila[78] != '' else "Calculando..."
+
+    pct_proy_fp = fmt_pct(fila[79]) if fila[79] != '' else "..."
+    pct_proy_jp = fmt_pct(fila[80]) if fila[80] != '' else "..."
+    dif_real_pct = fmt_pct(fila[81]) if fila[81] != '' else "..."
 
     # Extraemos Datos Base (Del Pasado) para comparar
     partido_1_ant = fila_ant[1]
@@ -172,6 +183,11 @@ def disparar_alerta_completa():
         f"✅ Contabilizadas: {cont_ext}\n"
         f"🏛️ Enviadas JEE: {jee_env_ext}\n"
         f"⏳ Pendientes JEE: {jee_pend_ext}\n"
+        f"--------------------------------------\n"
+        f"🎯 <b>PROYECCIÓN MATEMÁTICA AL 100%</b>\n"
+        f"🟠 Proy. FP: {proy_real_fp} votos ({pct_proy_fp})\n"
+        f"🟢 Proy. JP: {proy_real_jp} votos ({pct_proy_jp})\n"
+        f"⚖️ <b>Dif. Proyectada:</b> {dif_real_votos} votos ({dif_real_pct})\n"
         f"--------------------------------------\n"
         f"{comentario_final}\n"
     )
