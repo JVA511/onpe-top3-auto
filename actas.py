@@ -35,22 +35,12 @@ def enviar_telegram(mensaje):
         print(f"❌ Error enviando Telegram: {e}")
 
 def disparar_alerta_completa():
-    # 1. Nos conectamos primero para "despertar" la hoja
+    print("Esperando 3 segundos para que Google Sheets calcule las proyecciones...")
+    time.sleep(3)
+    
     sheet = conectar_google()
     historico = sheet.worksheet("Historico")
     
-    # 2. Forzamos a Google a espabilarse leyendo cualquier celda
-    print("Conexión establecida. Forzando recálculo en Google Sheets...")
-    try:
-        historico.cell(1, 1).value
-    except:
-        pass
-    
-    # 3. Metemos la pausa de 12 segundos con la hoja ya activa
-    print("Esperando 12 segundos para que Google Sheets calcule las proyecciones...")
-    time.sleep(12)
-    
-    # 4. Traemos la última fila ya recalculada
     ultima_fila = len(historico.col_values(1))
     fila = historico.row_values(ultima_fila)
     
@@ -123,47 +113,30 @@ def disparar_alerta_completa():
     pct_proy_jp = fmt_pct(fila[80]) if fila[80] != '' else "..."
     dif_real_pct = fmt_pct(fila[81]) if fila[81] != '' else "..."
 
-    # Extraemos Datos Base (Del Pasado) para comparar
-    partido_1_ant = fila_ant[1]
-    dif_votos_ant = fmt_num(fila_ant[7])
-
-    # --- 3. NUEVA LÓGICA DE LA ESCALA DE PÁNICO (CON CONECTORES) ---
-    def generar_comentario_dinamico(ganador_hoy, dif_hoy_txt, ganador_ayer, dif_ayer_txt):
+    # --- 3. NUEVA LÓGICA DE LA ESCALA DE PÁNICO ---
+    def generar_comentario_dinamico(ganador_hoy, dif_hoy_txt):
         try:
-            # Convertimos las diferencias a enteros
+            # Convertimos la diferencia limpia a entero para la lógica matemática
             dif_hoy = int(str(dif_hoy_txt).replace('.', '').replace(',', ''))
-            try:
-                dif_ayer = int(str(dif_ayer_txt).replace('.', '').replace(',', ''))
-            except:
-                dif_ayer = dif_hoy # Por si es la primera vez que corre y no hay data anterior
             
             es_jp_hoy = "JUNTOS" in ganador_hoy.upper() or "JP" in ganador_hoy.upper()
-            
-            # Lógica para saber si subió o bajó, integrando los conectores
-            if dif_hoy > dif_ayer:
-                tendencia = f"y ha subido a {dif_hoy_txt}"
-            elif dif_hoy < dif_ayer:
-                tendencia = f"pero ha bajado a {dif_hoy_txt}"
-            else:
-                tendencia = f"y se mantiene en {dif_hoy_txt}"
             
             if not es_jp_hoy:
                 return "🤖 <b>Comentario:</b> ¡FP volteó el partido! Alberto lo celebra desde su tumba en la Diroes y el taper se revaloriza."
             else:
                 if dif_hoy > 100000:
-                    return f"🤖 <b>Comentario:</b> JP sigue primero {tendencia}. Todo está perdido, que nos conquisten los españoles de nuevo porque este país ya no tiene salvación."
+                    return f"🤖 <b>Comentario:</b> JP sigue primero y la diferencia ya es de {dif_hoy_txt}. Todo está perdido, que nos conquisten los españoles de nuevo porque este país ya no tiene salvación."
                 elif dif_hoy >= 20000:
-                    return f"🤖 <b>Comentario:</b> JP sigue primero {tendencia}. Estamos cagados, vayan sacando sus pasajes o renovando el pasaporte por si las moscas."
+                    return f"🤖 <b>Comentario:</b> JP sigue primero pero la diferencia está en {dif_hoy_txt}. Estamos cagados, vayan sacando sus pasajes o renovando el pasaporte por si las moscas."
                 elif dif_hoy >= 5000:
-                    return f"🤖 <b>Comentario:</b> JP sigue primero {tendencia}. Seguimos cagados pero confío en que baje más por la ptm."
+                    return f"🤖 <b>Comentario:</b> Al fin bajó la diferencia a {dif_hoy_txt}. Seguimos cagados pero confío en que baje más por la ptm."
                 else:
-                    return f"🤖 <b>Comentario:</b> JP sigue primero {tendencia}. Estamos cagados, pero con un micro-respiro, ¡sí se puede la ptm!"
+                    return f"🤖 <b>Comentario:</b> JP sigue primero, pero la diferencia es de {dif_hoy_txt}. Estamos cagados, pero con un micro-respiro, ¡sí se puede la ptm!"
                     
         except Exception as e:
             return "🤖 <b>Comentario:</b> Qué nervios esta diferencia."
 
-    # Llamamos a la función pasándole también los datos del pasado
-    comentario_final = generar_comentario_dinamico(partido_1, dif_votos, partido_1_ant, dif_votos_ant)
+    comentario_final = generar_comentario_dinamico(partido_1, dif_votos)
 
     # --- ARMAMOS EL MENSAJE FINAL (HTML) ---
     texto_alerta = (
