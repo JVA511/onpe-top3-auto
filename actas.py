@@ -35,12 +35,22 @@ def enviar_telegram(mensaje):
         print(f"❌ Error enviando Telegram: {e}")
 
 def disparar_alerta_completa():
-    print("Esperando 12 segundos para que Google Sheets calcule las proyecciones...")
-    time.sleep(12)
-    
+    # 1. Nos conectamos primero para "despertar" la hoja
     sheet = conectar_google()
     historico = sheet.worksheet("Historico")
     
+    # 2. Forzamos a Google a espabilarse leyendo cualquier celda
+    print("Conexión establecida. Forzando recálculo en Google Sheets...")
+    try:
+        historico.cell(1, 1).value
+    except:
+        pass
+    
+    # 3. Metemos la pausa de 12 segundos con la hoja ya activa
+    print("Esperando 12 segundos para que Google Sheets calcule las proyecciones...")
+    time.sleep(12)
+    
+    # 4. Traemos la última fila ya recalculada
     ultima_fila = len(historico.col_values(1))
     fila = historico.row_values(ultima_fila)
     
