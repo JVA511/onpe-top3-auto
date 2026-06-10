@@ -44,12 +44,11 @@ def disparar_alerta_completa():
     ultima_fila = len(historico.col_values(1))
     fila = historico.row_values(ultima_fila)
     
-    # --- EL LECTOR DEL PASADO (NUEVO) ---
-    # Si tenemos más de 2 filas (la 1 es cabecera), leemos la anterior para comparar
+    # --- EL LECTOR DEL PASADO ---
     if ultima_fila > 2:
         fila_ant = historico.row_values(ultima_fila - 1)
     else:
-        fila_ant = fila # Si no hay datos, fingimos que son iguales
+        fila_ant = fila
         
     if len(fila) < 82: fila += [''] * (82 - len(fila))
     if len(fila_ant) < 82: fila_ant += [''] * (82 - len(fila_ant))
@@ -114,40 +113,30 @@ def disparar_alerta_completa():
     pct_proy_jp = fmt_pct(fila[80]) if fila[80] != '' else "..."
     dif_real_pct = fmt_pct(fila[81]) if fila[81] != '' else "..."
 
-    # Extraemos Datos Base (Del Pasado)
-    partido_1_ant = fila_ant[1]
-    dif_votos_ant = fmt_num(fila_ant[7])
-
-    # --- 3. REGLAS PREDETERMINADAS (CEREBRO ESTÁTICO V2) ---
-    def generar_comentario_estatico(ganador_hoy, dif_hoy_txt, ganador_ayer, dif_ayer_txt):
+    # --- 3. NUEVA LÓGICA DE LA ESCALA DE PÁNICO ---
+    def generar_comentario_dinamico(ganador_hoy, dif_hoy_txt):
         try:
-            # Convertimos las diferencias a números enteros limpios para comparar
+            # Convertimos la diferencia limpia a entero para la lógica matemática
             dif_hoy = int(str(dif_hoy_txt).replace('.', '').replace(',', ''))
-            try:
-                dif_ayer = int(str(dif_ayer_txt).replace('.', '').replace(',', ''))
-            except:
-                dif_ayer = dif_hoy
             
             es_jp_hoy = "JUNTOS" in ganador_hoy.upper() or "JP" in ganador_hoy.upper()
-            es_jp_ayer = "JUNTOS" in ganador_ayer.upper() or "JP" in ganador_ayer.upper()
             
-            if es_jp_hoy:
-                if dif_hoy > 10000:
-                    if es_jp_ayer and dif_hoy > dif_ayer:
-                        return f"🤖 <b>Comentario:</b> La diferencia subió a {dif_hoy_txt} votos y sigue ganando JP ptm. Oficialmente seguimos recontra cagados. Vayan sacando pasaporte."
-                    elif es_jp_ayer and dif_hoy < dif_ayer:
-                        return f"🤖 <b>Comentario:</b> JP sigue primero pero la diferencia bajó a {dif_hoy_txt}. Estamos cagados, pero con un micro-respiro."
-                    else:
-                        return f"🤖 <b>Comentario:</b> Oficialmente estamos cagados. JP dio la vuelta y ya sacó más de 10k de diferencia. Vayan sacando pasaporte."
-                else:
-                    return f"🤖 <b>Comentario:</b> Aún hay esperanza, la brecha es de solo {dif_hoy_txt} votos. ¡Pongan a rezar a sus abuelas!"
+            if not es_jp_hoy:
+                return "🤖 <b>Comentario:</b> ¡FP volteó el partido! Alberto lo celebra desde su tumba en la Diroes y el taper se revaloriza."
             else:
-                return "🤖 <b>Comentario:</b> Lo celebra Fujimori desde la tumba."
-                
+                if dif_hoy > 100000:
+                    return f"🤖 <b>Comentario:</b> JP sigue primero y la diferencia ya es de {dif_hoy_txt}. Todo está perdido, que nos conquisten los españoles de nuevo porque este país ya no tiene salvación."
+                elif dif_hoy >= 20000:
+                    return f"🤖 <b>Comentario:</b> JP sigue primero pero la diferencia está en {dif_hoy_txt}. Estamos cagados, vayan sacando sus pasajes o renovando el pasaporte por si las moscas."
+                elif dif_hoy >= 5000:
+                    return f"🤖 <b>Comentario:</b> Al fin bajó la diferencia a {dif_hoy_txt}. Seguimos cagados pero confío en que baje más por la ptm."
+                else:
+                    return f"🤖 <b>Comentario:</b> JP sigue primero, pero la diferencia es de {dif_hoy_txt}. Estamos cagados, pero con un micro-respiro, ¡sí se puede la ptm!"
+                    
         except Exception as e:
             return "🤖 <b>Comentario:</b> Qué nervios esta diferencia."
 
-    comentario_final = generar_comentario_estatico(partido_1, dif_votos, partido_1_ant, dif_votos_ant)
+    comentario_final = generar_comentario_dinamico(partido_1, dif_votos)
 
     # --- ARMAMOS EL MENSAJE FINAL (HTML) ---
     texto_alerta = (
