@@ -35,8 +35,8 @@ def enviar_telegram(mensaje):
         print(f"❌ Error enviando Telegram: {e}")
 
 def disparar_alerta_completa():
-    print("Esperando 3 segundos para que Google Sheets calcule las proyecciones...")
-    time.sleep(3)
+    print("Esperando 6 segundos para que Google Sheets calcule las proyecciones...")
+    time.sleep(6)
     
     sheet = conectar_google()
     historico = sheet.worksheet("Historico")
