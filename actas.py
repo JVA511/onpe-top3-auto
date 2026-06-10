@@ -35,9 +35,6 @@ def enviar_telegram(mensaje):
         print(f"❌ Error enviando Telegram: {e}")
 
 def disparar_alerta_completa():
-    print("Esperando 3 segundos para que Google Sheets calcule las proyecciones...")
-    time.sleep(3)
-    
     sheet = conectar_google()
     historico = sheet.worksheet("Historico")
     
@@ -105,38 +102,45 @@ def disparar_alerta_completa():
     jee_env_ext = fmt_num(fila[19]) 
     jee_pend_ext = fmt_num(fila[20])
 
-    proy_real_fp = fmt_num(fila[76]) if fila[76] != '' else "Calculando..."
-    proy_real_jp = fmt_num(fila[77]) if fila[77] != '' else "Calculando..."
-    dif_real_votos = fmt_num(fila[78]) if fila[78] != '' else "Calculando..."
+    # Extraemos Datos Base (Del Pasado) para comparar
+    partido_1_ant = fila_ant[1]
+    dif_votos_ant = fmt_num(fila_ant[7])
 
-    pct_proy_fp = fmt_pct(fila[79]) if fila[79] != '' else "..."
-    pct_proy_jp = fmt_pct(fila[80]) if fila[80] != '' else "..."
-    dif_real_pct = fmt_pct(fila[81]) if fila[81] != '' else "..."
-
-    # --- 3. NUEVA LÓGICA DE LA ESCALA DE PÁNICO ---
-    def generar_comentario_dinamico(ganador_hoy, dif_hoy_txt):
+    # --- 3. LÓGICA DE LA ESCALA DE PÁNICO (CON CONECTORES) ---
+    def generar_comentario_dinamico(ganador_hoy, dif_hoy_txt, ganador_ayer, dif_ayer_txt):
         try:
-            # Convertimos la diferencia limpia a entero para la lógica matemática
             dif_hoy = int(str(dif_hoy_txt).replace('.', '').replace(',', ''))
+            try:
+                dif_ayer = int(str(dif_ayer_txt).replace('.', '').replace(',', ''))
+            except:
+                dif_ayer = dif_hoy # Por si es la primera vez que corre
             
             es_jp_hoy = "JUNTOS" in ganador_hoy.upper() or "JP" in ganador_hoy.upper()
+            
+            # Lógica para saber si subió o bajó
+            if dif_hoy > dif_ayer:
+                tendencia = f"y ha subido a {dif_hoy_txt}"
+            elif dif_hoy < dif_ayer:
+                tendencia = f"pero ha bajado a {dif_hoy_txt}"
+            else:
+                tendencia = f"y se mantiene en {dif_hoy_txt}"
             
             if not es_jp_hoy:
                 return "🤖 <b>Comentario:</b> ¡FP volteó el partido! Alberto lo celebra desde su tumba en la Diroes y el taper se revaloriza."
             else:
                 if dif_hoy > 100000:
-                    return f"🤖 <b>Comentario:</b> JP sigue primero y la diferencia ya es de {dif_hoy_txt}. Todo está perdido, que nos conquisten los españoles de nuevo porque este país ya no tiene salvación."
+                    return f"🤖 <b>Comentario:</b> JP sigue primero {tendencia}. Todo está perdido, que nos conquisten los españoles de nuevo porque este país ya no tiene salvación."
                 elif dif_hoy >= 20000:
-                    return f"🤖 <b>Comentario:</b> JP sigue primero pero la diferencia está en {dif_hoy_txt}. Estamos cagados, vayan sacando sus pasajes o renovando el pasaporte por si las moscas."
+                    return f"🤖 <b>Comentario:</b> JP sigue primero {tendencia}. Estamos cagados, vayan sacando sus pasajes o renovando el pasaporte por si las moscas."
                 elif dif_hoy >= 5000:
-                    return f"🤖 <b>Comentario:</b> Al fin bajó la diferencia a {dif_hoy_txt}. Seguimos cagados pero confío en que baje más por la ptm."
+                    return f"🤖 <b>Comentario:</b> JP sigue primero {tendencia}. Seguimos cagados pero confío en que baje más por la ptm."
                 else:
-                    return f"🤖 <b>Comentario:</b> JP sigue primero, pero la diferencia es de {dif_hoy_txt}. Estamos cagados, pero con un micro-respiro, ¡sí se puede la ptm!"
+                    return f"🤖 <b>Comentario:</b> JP sigue primero {tendencia}. Estamos cagados, pero con un micro-respiro, ¡sí se puede la ptm!"
                     
         except Exception as e:
             return "🤖 <b>Comentario:</b> Qué nervios esta diferencia."
 
-    comentario_final = generar_comentario_dinamico(partido_1, dif_votos)
+    comentario_final = generar_comentario_dinamico(partido_1, dif_votos, partido_1_ant, dif_votos_ant)
 
     # --- ARMAMOS EL MENSAJE FINAL (HTML) ---
     texto_alerta = (
@@ -168,11 +172,6 @@ def disparar_alerta_completa():
         f"✅ Contabilizadas: {cont_ext}\n"
         f"🏛️ Enviadas JEE: {jee_env_ext}\n"
         f"⏳ Pendientes JEE: {jee_pend_ext}\n"
-        f"--------------------------------------\n"
-        f"🎯 <b>PROYECCIÓN MATEMÁTICA AL 100%</b>\n"
-        f"🟠 Proy. FP: {proy_real_fp} votos ({pct_proy_fp})\n"
-        f"🟢 Proy. JP: {proy_real_jp} votos ({pct_proy_jp})\n"
-        f"⚖️ <b>Dif. Proyectada:</b> {dif_real_votos} votos ({dif_real_pct})\n"
         f"--------------------------------------\n"
         f"{comentario_final}\n"
     )
